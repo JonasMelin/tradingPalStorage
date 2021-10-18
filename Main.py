@@ -89,6 +89,7 @@ class Main():
 
         try:
             transactionsData['date'] = datetime.datetime.strptime(transactionsData['date'], '%Y-%m-%d %H:%M:%S.%f%z')
+            print(f"{datetime.datetime.utcnow()} Writing transactions to mongo: {transactionsData}")
             self.COLLECTIONTrans.insert(transactionsData)
         except Exception as ex:
             print(f"{datetime.datetime.utcnow()} Failed to insert transactions to mongo. {ex}")
@@ -122,9 +123,7 @@ class Main():
             self.writeTickersToMongo(self.fetchTickers())
             self.writeTransactionsToMongo(self.fetchTransactions())
             sys.stdout.flush()
-            time.sleep(10)
-
-
+            time.sleep(60)
 
 if __name__ == "__main__":
     Main().mainLoop()
