@@ -4,6 +4,7 @@ import requests
 import json
 import datetime
 import sys
+import pytz
 
 mongoPort = 27018
 mongoHost = "127.0.0.1"
@@ -21,6 +22,8 @@ class Main():
         self._testMongoConnection(self.MONGO_CLIENT_TRANS)
         self.lastFetchedTickerHash = 0
         self.fixIndex()
+        self.transactionsConnectionOk = False
+        self.tickersConnectionOk = False
 
     def _connectDb(self, mongoHost, mongoPort, databaseName, collectionName):
 
@@ -32,31 +35,35 @@ class Main():
     def _testMongoConnection(self, dbConnection):
 
         try:
-            print(f"{datetime.datetime.utcnow()} Mongo connection OK! Version: {dbConnection.server_info()['version']}")
+            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Mongo connection OK! Version: {dbConnection.server_info()['version']}")
         except Exception as ex:
             raise ValueError(f"{datetime.datetime.utcnow()} Mongo connection FAILED! (B)  {ex}")
 
     def fixIndex(self):
 
-        print(f"{datetime.datetime.utcnow()} Creating index")
+        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Creating index")
         self.DB[collectionNameTickers].create_index([('tickerName', ASCENDING)])
         self.DB[collectionNameTickers].create_index([('dateUTC', ASCENDING)])
         self.DB[collectionNameTickers].create_index(name='tickerDate', keys=[('tickerName', ASCENDING), ('dateUTC', ASCENDING)])
-        print(f"{datetime.datetime.utcnow()} Done (creating index)")
+        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Done (creating index)")
 
     def fetchTransactions(self):
         try:
             retData = requests.get(URLTransactions)
 
             if retData.status_code != 200:
-                print(f"{datetime.datetime.utcnow()} Failed to fetch transactions... ")
+                print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to fetch transactions... ")
                 sys.stdout.flush()
                 time.sleep(60)
+
+            if not self.transactionsConnectionOk:
+                print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Connection to tradingpal to fetch transactions OK")
+                self.transactionsConnectionOk = True
 
             return json.loads(retData.content)
 
         except Exception as ex:
-            print(f"{datetime.datetime.utcnow()} Failed to fetch transactions: {ex}")
+            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to fetch transactions: {ex}")
             return None
 
     def fetchTickers(self):
@@ -64,9 +71,13 @@ class Main():
         try:
             retData = requests.get(URLTickers)
             if retData.status_code != 200:
-                print(f"{datetime.datetime.utcnow()} Failed to fetch stocks... ")
+                print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to fetch stocks... ")
                 sys.stdout.flush()
                 time.sleep(60)
+
+            if not self.tickersConnectionOk:
+                print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Connection to tradingpal to fetch tickers OK")
+                self.tickersConnectionOk = True
 
             dataAsJson = json.loads(retData.content)
             newHash = hash(str(dataAsJson["list"]))
@@ -79,7 +90,7 @@ class Main():
                 return dataAsJson
 
         except Exception as ex:
-            print(f"{datetime.datetime.utcnow()} Failed to fetch tickers: {ex}")
+            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to fetch tickers: {ex}")
             return None
 
     def writeTransactionsToMongo(self, transactionsData):
@@ -89,17 +100,17 @@ class Main():
 
         try:
             transactionsData['date'] = datetime.datetime.strptime(transactionsData['date'], '%Y-%m-%d %H:%M:%S.%f%z')
-            print(f"{datetime.datetime.utcnow()} Writing transactions to mongo: {transactionsData}")
+            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Writing transactions to mongo: {transactionsData}")
             self.COLLECTIONTrans.insert(transactionsData)
         except Exception as ex:
-            print(f"{datetime.datetime.utcnow()} Failed to insert transactions to mongo. {ex}")
+            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to insert transactions to mongo. {ex}")
 
     def writeTickersToMongo(self, tickerData):
 
         if tickerData is None:
             return
 
-        print(f"{datetime.datetime.utcnow()} Writing data to mongo")
+        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Writing tickers to mongo")
         allElementsForMongo = []
 
         try:
@@ -111,12 +122,12 @@ class Main():
 
             self.COLLECTION.insert_many(allElementsForMongo)
         except Exception as ex:
-            print(f"{datetime.datetime.utcnow()} Failed to insert tickers to mongo. {ex}")
+            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to insert tickers to mongo. {ex}")
 
 
     def mainLoop(self):
 
-        print("Starting...")
+        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Starting...")
         sys.stdout.flush()
 
         while True:
