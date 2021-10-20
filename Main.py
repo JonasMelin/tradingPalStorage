@@ -5,6 +5,10 @@ import json
 import datetime
 import sys
 import pytz
+import threading
+from flask import Flask, request
+
+app = Flask(__name__)
 
 mongoPort = 27018
 mongoHost = "127.0.0.1"
@@ -14,10 +18,14 @@ collectionNameTransactions = f"transactions"
 URLTickers = "http://127.0.0.1:5000/tradingpal/getAllStocks"
 URLTransactions = "http://127.0.0.1:5000/tradingpal/getFirstChangeLogItem"
 
+globCollectionTransactions = None
+
 class Main():
     def __init__(self):
+        global globCollectionTransactions
         self.DB, self.COLLECTION, self.MONGO_CLIENT = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameTickers)
         self.DBTrans, self.COLLECTIONTrans, self.MONGO_CLIENT_TRANS = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameTransactions)
+        globCollectionTransactions = self.COLLECTIONTrans
         self._testMongoConnection(self.MONGO_CLIENT)
         self._testMongoConnection(self.MONGO_CLIENT_TRANS)
         self.lastFetchedTickerHash = 0
@@ -42,6 +50,9 @@ class Main():
     def fixIndex(self):
 
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Creating index")
+
+        self.DB[collectionNameTransactions].create_index([('date', ASCENDING)])
+
         self.DB[collectionNameTickers].create_index([('tickerName', ASCENDING)])
         self.DB[collectionNameTickers].create_index([('dateUTC', ASCENDING)])
         self.DB[collectionNameTickers].create_index(name='tickerDate', keys=[('tickerName', ASCENDING), ('dateUTC', ASCENDING)])
@@ -124,7 +135,6 @@ class Main():
         except Exception as ex:
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to insert tickers to mongo. {ex}")
 
-
     def mainLoop(self):
 
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Starting...")
@@ -136,5 +146,28 @@ class Main():
             sys.stdout.flush()
             time.sleep(60)
 
+@app.route("/tradingpalstorage/getTransactionsLastDays", methods=['GET'])
+def getTransactionsLastDays():
+    global globCollectionTransactions
+
+    try:
+        daysback = request.args.get("daysback")
+        hits = globCollectionTransactions.find({"date": { "$gte" :  datetime.datetime.now() - datetime.timedelta(days=int(daysback) + 1), "$lte" :  datetime.datetime.now() - datetime.timedelta(days=int(daysback))}})
+
+        retval = []
+        for hit in hits:
+            del(hit['_id'])
+            hit['date'] = str(hit['date'])
+            retval.append(hit)
+
+        return {"retval": retval}
+    except Exception as ex:
+        errorMsg = (f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))}. getTransactionsLastDays: Could not fetch data from mongo, {ex}")
+        print(errorMsg)
+        return errorMsg
+
 if __name__ == "__main__":
-    Main().mainLoop()
+
+    main = Main()
+    threading.Thread(target=main.mainLoop).start()
+    app.run(host='0.0.0.0', port=5001)
