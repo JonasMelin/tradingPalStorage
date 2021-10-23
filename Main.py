@@ -151,8 +151,12 @@ def getTransactionsLastDays():
     global globCollectionTransactions
 
     try:
-        daysback = request.args.get("daysback")
-        hits = globCollectionTransactions.find({"date": { "$gte" :  datetime.datetime.now() - datetime.timedelta(days=int(daysback) + 1), "$lte" :  datetime.datetime.now() - datetime.timedelta(days=int(daysback))}})
+        daysback = int(request.args.get("daysback"))
+        queryDay = datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm')) - datetime.timedelta(days=daysback)
+        queryStart = queryDay.replace(hour=0, minute=0, second=0, microsecond=0)
+        queryEnd = queryStart + datetime.timedelta(1)
+
+        hits = globCollectionTransactions.find({"date": {"$gte": queryStart, "$lte": queryEnd}})
 
         retval = []
         for hit in hits:
