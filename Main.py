@@ -5,7 +5,7 @@ import json
 import datetime
 import sys
 import pytz
-import threading
+import math
 from flask import Flask, request
 
 app = Flask(__name__)
@@ -146,16 +146,20 @@ class Main():
             sys.stdout.flush()
             time.sleep(60)
 
+def getQueryStartEndFullDays(daysback):
+
+    queryDay = datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm')) - datetime.timedelta(days=daysback)
+    queryStart = queryDay.replace(hour=0, minute=0, second=0, microsecond=0)
+    queryEnd = queryStart + datetime.timedelta(1)
+    return queryStart, queryEnd
+
 @app.route("/tradingpalstorage/getTransactionsLastDays", methods=['GET'])
 def getTransactionsLastDays():
     global globCollectionTransactions
 
     try:
         daysback = int(request.args.get("daysback"))
-        queryDay = datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm')) - datetime.timedelta(days=daysback)
-        queryStart = queryDay.replace(hour=0, minute=0, second=0, microsecond=0)
-        queryEnd = queryStart + datetime.timedelta(1)
-
+        queryStart, queryEnd = getQueryStartEndFullDays(daysback)
         hits = globCollectionTransactions.find({"date": {"$gte": queryStart, "$lte": queryEnd}})
 
         retval = []
@@ -169,6 +173,25 @@ def getTransactionsLastDays():
         errorMsg = (f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))}. getTransactionsLastDays: Could not fetch data from mongo, {ex}")
         print(errorMsg)
         return errorMsg
+
+@app.route("/tradingpalstorage/getTurnoverLastDays", methods=['GET'])
+def getStatsLastDays():
+    daysback = int(request.args.get("daysback"))
+    _, queryEnd = getQueryStartEndFullDays(0)
+    queryStart, _ = getQueryStartEndFullDays(daysback)
+
+    hits = globCollectionTransactions.find({"date": {"$gte": queryStart, "$lte": queryEnd}})
+
+    sold = 0
+    bought = 0
+    for hit in hits:
+        bought += hit['purchaseValueSek'] if hit['purchaseValueSek'] > 0 else 0
+        sold += -hit['purchaseValueSek'] if hit['purchaseValueSek'] < 0 else 0
+
+    return {
+        "soldForSek": sold,
+        "boughtForSek": bought
+    }
 
 if __name__ == "__main__":
 
