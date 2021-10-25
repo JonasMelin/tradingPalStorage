@@ -11,7 +11,7 @@ from flask import Flask, request
 app = Flask(__name__)
 
 mongoPort = 27018
-mongoHost = "127.0.0.1"
+mongoHost = "192.168.1.50"
 databaseName = "TP"
 collectionNameTickers = f"tickers"
 collectionNameTransactions = f"transactions"
@@ -141,8 +141,8 @@ class Main():
         sys.stdout.flush()
 
         while True:
-            self.writeTickersToMongo(self.fetchTickers())
-            self.writeTransactionsToMongo(self.fetchTransactions())
+            #self.writeTickersToMongo(self.fetchTickers())
+            #self.writeTransactionsToMongo(self.fetchTransactions())
             sys.stdout.flush()
             time.sleep(60)
 
@@ -176,22 +176,31 @@ def getTransactionsLastDays():
 
 @app.route("/tradingpalstorage/getTurnoverLastDays", methods=['GET'])
 def getStatsLastDays():
-    daysback = int(request.args.get("daysback"))
-    _, queryEnd = getQueryStartEndFullDays(0)
-    queryStart, _ = getQueryStartEndFullDays(daysback)
+    global globCollectionTransactions
 
-    hits = globCollectionTransactions.find({"date": {"$gte": queryStart, "$lte": queryEnd}})
+    try:
+        daysback = int(request.args.get("daysback"))
+        _, queryEnd = getQueryStartEndFullDays(0)
+        queryStart, _ = getQueryStartEndFullDays(daysback)
 
-    sold = 0
-    bought = 0
-    for hit in hits:
-        bought += hit['purchaseValueSek'] if hit['purchaseValueSek'] > 0 else 0
-        sold += -hit['purchaseValueSek'] if hit['purchaseValueSek'] < 0 else 0
+        hits = globCollectionTransactions.find({"date": {"$gte": queryStart, "$lte": queryEnd}})
 
-    return {
-        "soldForSek": sold,
-        "boughtForSek": bought
-    }
+        sold = 0
+        bought = 0
+        for hit in hits:
+            bought += hit['purchaseValueSek'] if hit['purchaseValueSek'] > 0 else 0
+            sold += -hit['purchaseValueSek'] if hit['purchaseValueSek'] < 0 else 0
+
+        return {
+            "retval": {
+                "soldForSek": sold,
+                "boughtForSek": bought
+            }
+        }
+    except Exception as ex:
+        errorMsg = (f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))}. getTurnoverLastDays: Could not fetch data from mongo, {ex}")
+        print(errorMsg)
+        return errorMsg
 
 if __name__ == "__main__":
 
