@@ -141,8 +141,8 @@ class Main():
         sys.stdout.flush()
 
         while True:
-            #self.writeTickersToMongo(self.fetchTickers())
-            #self.writeTransactionsToMongo(self.fetchTransactions())
+            self.writeTickersToMongo(self.fetchTickers())
+            self.writeTransactionsToMongo(self.fetchTransactions())
             sys.stdout.flush()
             time.sleep(60)
 
