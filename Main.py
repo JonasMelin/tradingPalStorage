@@ -14,9 +14,10 @@ mongoPort = 27018
 mongoHost = "192.168.1.50"
 databaseName = "TP"
 collectionNameTickers = f"tickers"
+collectionNameDailyProgress = f"daily"
 collectionNameTransactions = f"transactions"
-URLTickers = "http://127.0.0.1:5000/tradingpal/getAllStocks"
-URLTransactions = "http://127.0.0.1:5000/tradingpal/getFirstChangeLogItem"
+URLTickers = "http://192.168.1.50:5000/tradingpal/getAllStocks"
+URLTransactions = "http://192.168.1.50:5000/tradingpal/getFirstChangeLogItem"
 
 globCollectionTransactions = None
 
@@ -25,9 +26,11 @@ class Main():
         global globCollectionTransactions
         self.DB, self.COLLECTION, self.MONGO_CLIENT = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameTickers)
         self.DBTrans, self.COLLECTIONTrans, self.MONGO_CLIENT_TRANS = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameTransactions)
+        self.DBDaily, self.COLLECTIONDaily, self.MONGO_CLIENT_DAILY = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameDailyProgress)
         globCollectionTransactions = self.COLLECTIONTrans
         self._testMongoConnection(self.MONGO_CLIENT)
         self._testMongoConnection(self.MONGO_CLIENT_TRANS)
+        self._testMongoConnection(self.MONGO_CLIENT_DAILY)
         self.lastFetchedTickerHash = 0
         self.fixIndex()
         self.transactionsConnectionOk = False
@@ -50,6 +53,8 @@ class Main():
     def fixIndex(self):
 
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Creating index")
+
+        self.DB[collectionNameDailyProgress].create_index([('day', ASCENDING), ('ticker', ASCENDING)], unique=True)
 
         self.DB[collectionNameTransactions].create_index([('date', ASCENDING)])
 
@@ -116,6 +121,29 @@ class Main():
         except Exception as ex:
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to insert transactions to mongo. {ex}")
 
+    def writeDailyProgressToMongo(self, tickerData):
+
+        try:
+            for nextTicker in (tickerData)['list']:
+                entry = {
+                    "ticker": nextTicker['tickerName'],
+                    "name": nextTicker['currentStock']['name'],
+                    "day": str(datetime.datetime.now(pytz.timezone('Europe/Stockholm')).date()),
+                    "count": nextTicker['currentStock']['count'],
+                    "singleStockPriceSek": nextTicker['singleStockPriceSek']
+                }
+                self.COLLECTIONDaily.update_one(
+                    {"day": entry["day"], "ticker": entry['ticker']},
+                    { "$set":
+                          {
+                              "count": entry["count"],
+                              "singleStockPriceSek": entry["singleStockPriceSek"]
+                          }
+                    }, upsert=True)
+
+        except Exception as ex:
+            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to upsert daily progress to mongo. {ex}")
+
     def writeTickersToMongo(self, tickerData):
 
         if tickerData is None:
@@ -141,7 +169,9 @@ class Main():
         sys.stdout.flush()
 
         while True:
-            self.writeTickersToMongo(self.fetchTickers())
+            tickers = self.fetchTickers()
+            self.writeTickersToMongo(tickers)
+            self.writeDailyProgressToMongo(tickers)
             self.writeTransactionsToMongo(self.fetchTransactions())
             sys.stdout.flush()
             time.sleep(60)
