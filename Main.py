@@ -128,9 +128,6 @@ class Main():
 
         for nextTicker in (tickerData)['list']:
             try:
-                if not nextTicker['marketOpen']:
-                    continue
-
                 entry = {
                     "ticker": nextTicker['tickerName'],
                     "name": nextTicker['currentStock']['name'],
