@@ -126,6 +126,8 @@ class Main():
         if tickerData is None or 'list' not in tickerData:
             return
 
+        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Writing daily progress to mongo")
+
         for nextTicker in (tickerData)['list']:
             try:
                 entry = {
@@ -146,7 +148,7 @@ class Main():
                     }, upsert=True)
 
             except Exception as ex:
-                pass
+                print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to upsert progress to mongo. {ex}")
 
     def writeTickersToMongo(self, tickerData):
 
