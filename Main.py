@@ -123,8 +123,12 @@ class Main():
 
     def writeDailyProgressToMongo(self, tickerData):
 
-        try:
-            for nextTicker in (tickerData)['list']:
+
+        if tickerData is None or 'list' not in tickerData:
+            return
+
+        for nextTicker in (tickerData)['list']:
+            try:
                 entry = {
                     "ticker": nextTicker['tickerName'],
                     "name": nextTicker['currentStock']['name'],
@@ -141,8 +145,8 @@ class Main():
                           }
                     }, upsert=True)
 
-        except Exception as ex:
-            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to upsert daily progress to mongo. {ex}")
+            except Exception as ex:
+                pass
 
     def writeTickersToMongo(self, tickerData):
 
