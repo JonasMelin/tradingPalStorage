@@ -123,12 +123,14 @@ class Main():
 
     def writeDailyProgressToMongo(self, tickerData):
 
-
         if tickerData is None or 'list' not in tickerData:
             return
 
         for nextTicker in (tickerData)['list']:
             try:
+                if not nextTicker['marketOpen']:
+                    continue
+
                 entry = {
                     "ticker": nextTicker['tickerName'],
                     "name": nextTicker['currentStock']['name'],
@@ -141,7 +143,8 @@ class Main():
                     { "$set":
                           {
                               "count": entry["count"],
-                              "singleStockPriceSek": entry["singleStockPriceSek"]
+                              "singleStockPriceSek": entry["singleStockPriceSek"],
+                              "name": entry["name"]
                           }
                     }, upsert=True)
 
