@@ -6,6 +6,7 @@ import datetime
 import sys
 import pytz
 import threading
+import copy
 from flask import Flask, request
 
 app = Flask(__name__)
@@ -160,7 +161,7 @@ class Main():
 
         try:
 
-            for nextTicker in tickerData['list']:
+            for nextTicker in copy.deepcopy(tickerData['list']):
                 del(nextTicker['currentStock'])
                 nextTicker['dateUTC'] = datetime.datetime.strptime(tickerData['updatedUtc'], '%Y-%m-%d %H:%M:%S.%f%z')
                 allElementsForMongo.append(nextTicker)
@@ -176,8 +177,8 @@ class Main():
 
         while True:
             tickers = self.fetchTickers()
-            self.writeTickersToMongo(tickers)
             self.writeDailyProgressToMongo(tickers)
+            self.writeTickersToMongo(tickers)
             self.writeTransactionsToMongo(self.fetchTransactions())
             sys.stdout.flush()
             time.sleep(60)
