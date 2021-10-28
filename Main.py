@@ -133,10 +133,10 @@ class Main():
 
     def updateFundsToMongo(self, purchaseValueSek):
 
-        if purchaseValueSek != 0:
-            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Updating funds to mongo {purchaseValueSek}")
-
         try:
+            if purchaseValueSek != 0:
+                print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Updating funds to mongo {purchaseValueSek}")
+
             fromMongo = None
             for a in range(365):
                 fromMongo = self.COLLECTIONFunds.find_one({"day": getDayAsStringDaysBack(a)})
@@ -170,8 +170,6 @@ class Main():
             return
 
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Writing daily progress to mongo")
-
-        self.updateFundsToMongo(0) # purchase of 0 sek has no impact, but will copy record to database for every day
 
         for nextTicker in (tickerData)['list']:
             try:
@@ -224,6 +222,7 @@ class Main():
             self.writeDailyProgressToMongo(tickers)
             self.writeTickersToMongo(tickers)
             self.writeTransactionsToMongo(self.fetchTransactions())
+            self.updateFundsToMongo(0)  # purchase of 0 sek has no impact in Db, but will copy records from yesterday to today
             sys.stdout.flush()
             time.sleep(60)
 
@@ -283,7 +282,7 @@ def fetchFundsFromMongo(daysback):
             print("Funds not found in DB.")
 
         return fromMongo
-    
+
     except Exception as ex:
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Exception when fetching funds from mongo {ex}")
         return None
