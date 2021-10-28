@@ -17,25 +17,28 @@ databaseName = "TP"
 collectionNameTickers = f"tickers"
 collectionNameDailyProgress = f"daily"
 collectionNameTransactions = f"transactions"
+collectionNameFunds = f"funds"
 URLTickers = "http://192.168.1.50:5000/tradingpal/getAllStocks"
 URLTransactions = "http://192.168.1.50:5000/tradingpal/getFirstChangeLogItem"
 
 globCollectionTransactions = None
 globCollectionDaily = None
+globCollectionFunds = None
 
 class Main():
     def __init__(self):
         global globCollectionTransactions
         global globCollectionDaily
+        global globCollectionFunds
 
         self.DB, self.COLLECTION, self.MONGO_CLIENT = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameTickers)
         self.DBTrans, self.COLLECTIONTrans, self.MONGO_CLIENT_TRANS = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameTransactions)
         self.DBDaily, self.COLLECTIONDaily, self.MONGO_CLIENT_DAILY = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameDailyProgress)
+        self.DBFunds, self.COLLECTIONFunds, self.MONGO_CLIENT_FUNDS = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameFunds)
         globCollectionTransactions = self.COLLECTIONTrans
         globCollectionDaily = self.COLLECTIONDaily
+        globCollectionFunds = self.COLLECTIONFunds
         self._testMongoConnection(self.MONGO_CLIENT)
-        self._testMongoConnection(self.MONGO_CLIENT_TRANS)
-        self._testMongoConnection(self.MONGO_CLIENT_DAILY)
         self.lastFetchedTickerHash = 0
         self.fixIndex()
         self.transactionsConnectionOk = False
@@ -60,6 +63,7 @@ class Main():
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Creating index")
 
         self.DB[collectionNameDailyProgress].create_index([('day', ASCENDING), ('ticker', ASCENDING)], unique=True)
+        self.DB[collectionNameFunds].create_index([('day', ASCENDING)], unique=True)
 
         self.DB[collectionNameTransactions].create_index([('date', ASCENDING)])
 
@@ -123,8 +127,42 @@ class Main():
             transactionsData['date'] = datetime.datetime.strptime(transactionsData['date'], '%Y-%m-%d %H:%M:%S.%f%z')
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Writing transactions to mongo: {transactionsData}")
             self.COLLECTIONTrans.insert(transactionsData)
+            self.updateFundsToMongo(transactionsData['purchaseValueSek'])
         except Exception as ex:
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to insert transactions to mongo. {ex}")
+
+    def updateFundsToMongo(self, purchaseValueSek):
+
+        if purchaseValueSek != 0:
+            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Updating funds to mongo {purchaseValueSek}")
+
+        try:
+            fromMongo = None
+            for a in range(365):
+                fromMongo = self.COLLECTIONFunds.find_one({"day": getDayAsStringDaysBack(a)})
+                if fromMongo is not None:
+                    break
+
+            fundsSekFromMongo = 0
+            putinSekFromMongo = 0
+
+            if fromMongo is None:
+                print("Initializing funds collection in mongo...")
+            else:
+                fundsSekFromMongo = fromMongo['fundsSek']
+                putinSekFromMongo = fromMongo['putinSek']
+
+            self.COLLECTIONFunds.update_one(
+                {"day": getDayAsStringDaysBack(0)},
+                {"$set":
+                    {
+                        "fundsSek": fundsSekFromMongo - purchaseValueSek,
+                        "putinSek": putinSekFromMongo
+                    }
+                }, upsert=True)
+
+        except Exception as ex:
+            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to update funds in mongo. {ex}")
 
     def writeDailyProgressToMongo(self, tickerData):
 
@@ -132,6 +170,8 @@ class Main():
             return
 
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Writing daily progress to mongo")
+
+        self.updateFundsToMongo(0) # purchase of 0 sek has no impact, but will copy record to database for every day
 
         for nextTicker in (tickerData)['list']:
             try:
@@ -198,22 +238,25 @@ def getQueryStartEndFullDays(daysback):
     queryEnd = queryStart + datetime.timedelta(1)
     return queryStart, queryEnd
 
-def getFinancialDiffBetween(start, end):
+def getFinancialDiffBetween(startTickersIn, startFunds, endTickersIn, endFunds):
 
     totStartValue = 0
     totEndValue = 0
     startTickers = {}
-    for nextticker in start:
-        startTickers[nextticker["ticker"]] = nextticker
+    for startticker in startTickersIn:
+        startTickers[startticker["ticker"]] = startticker
 
-    for nextTicker in end:
-        tickerName = nextTicker['ticker']
+    for endTicker in endTickersIn:
+        endTickerName = endTicker['ticker']
 
-        if tickerName not in startTickers:
+        if endTickerName not in startTickers:
             continue
 
-        totStartValue += startTickers[tickerName]['count'] * startTickers[tickerName]['singleStockPriceSek']
-        totEndValue += nextTicker['count'] * nextTicker['singleStockPriceSek']
+        totStartValue += startTickers[endTickerName]['count'] * startTickers[endTickerName]['singleStockPriceSek']
+        totEndValue += endTicker['count'] * endTicker['singleStockPriceSek']
+
+    totStartValue += (startFunds['fundsSek'] if startFunds is not None else 0) - (startFunds['putinSek'] if startFunds is not None else 0)
+    totEndValue += (endFunds['fundsSek'] if endFunds is not None else 0) - (endFunds['putinSek'] if endFunds is not None else 0)
 
     if totStartValue == 0:
         return -99999.9
@@ -222,16 +265,37 @@ def getFinancialDiffBetween(start, end):
 
 def getHistoricDevelopment(daysback):
     try:
-        return getFinancialDiffBetween(fetchDailyDataFromMongo(daysback), fetchDailyDataFromMongo(0))
+        stocksDaysBack, fundsDaysBack = fetchDailyDataFromMongo(daysback)
+        stocksToday, fundsToday = fetchDailyDataFromMongo(0)
+
+        return getFinancialDiffBetween(stocksDaysBack, fundsDaysBack, stocksToday, fundsToday )
     except Exception as ex:
         return -88888.8
+
+def fetchFundsFromMongo(daysback):
+    global globCollectionFunds
+
+    try:
+
+        fromMongo = globCollectionFunds.find_one({"day": getDayAsStringDaysBack(daysback)})
+
+        if fromMongo is None:
+            print("Funds not found in DB.")
+
+        return fromMongo
+    
+    except Exception as ex:
+        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Exception when fetching funds from mongo {ex}")
+        return None
+
 
 def fetchDailyDataFromMongo(daysback):
 
     global globCollectionDaily
 
     for a in range(5): # To pass by weekends and such
-        dayAsString = getDayAsStringDaysBack(daysback + a)
+        dayBackToCheck = daysback + a
+        dayAsString = getDayAsStringDaysBack(dayBackToCheck)
         hits = globCollectionDaily.find({"day": dayAsString})
         retData = []
 
@@ -239,9 +303,9 @@ def fetchDailyDataFromMongo(daysback):
             retData.append(hit)
 
         if len(retData) > 0:
-            return retData
+            return retData, fetchFundsFromMongo(dayBackToCheck)
 
-    return []
+    return [], None
 
 @app.route("/tradingpalstorage/getDevelopmentSinceDaysBack", methods=['GET'])
 def getDevelopmentSinceDaysBack():
@@ -299,5 +363,9 @@ def getStatsLastDays():
 if __name__ == "__main__":
 
     main = Main()
+    #main.updateFundsToMongo(0)
+    #print(fetchFundsFromMongo(1))
+    #print(getHistoricDevelopment(1))
+
     threading.Thread(target=main.mainLoop).start()
     app.run(host='0.0.0.0', port=5001)
