@@ -21,14 +21,18 @@ URLTickers = "http://192.168.1.50:5000/tradingpal/getAllStocks"
 URLTransactions = "http://192.168.1.50:5000/tradingpal/getFirstChangeLogItem"
 
 globCollectionTransactions = None
+globCollectionDaily = None
 
 class Main():
     def __init__(self):
         global globCollectionTransactions
+        global globCollectionDaily
+
         self.DB, self.COLLECTION, self.MONGO_CLIENT = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameTickers)
         self.DBTrans, self.COLLECTIONTrans, self.MONGO_CLIENT_TRANS = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameTransactions)
         self.DBDaily, self.COLLECTIONDaily, self.MONGO_CLIENT_DAILY = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameDailyProgress)
         globCollectionTransactions = self.COLLECTIONTrans
+        globCollectionDaily = self.COLLECTIONDaily
         self._testMongoConnection(self.MONGO_CLIENT)
         self._testMongoConnection(self.MONGO_CLIENT_TRANS)
         self._testMongoConnection(self.MONGO_CLIENT_DAILY)
@@ -183,12 +187,65 @@ class Main():
             sys.stdout.flush()
             time.sleep(60)
 
+def getDayAsStringDaysBack(daysback):
+    day = datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm')) - datetime.timedelta(days=daysback)
+    return  f"{day.year}-{day.month}-{day.day}"
+
 def getQueryStartEndFullDays(daysback):
 
     queryDay = datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm')) - datetime.timedelta(days=daysback)
     queryStart = queryDay.replace(hour=0, minute=0, second=0, microsecond=0)
     queryEnd = queryStart + datetime.timedelta(1)
     return queryStart, queryEnd
+
+def getFinancialDiffBetween(start, end):
+
+    totStartValue = 0
+    totEndValue = 0
+    startTickers = {}
+    for nextticker in start:
+        startTickers[nextticker["ticker"]] = nextticker
+
+    for nextTicker in end:
+        tickerName = nextTicker['ticker']
+
+        if tickerName not in startTickers:
+            continue
+
+        totStartValue += startTickers[tickerName]['count'] * startTickers[tickerName]['singleStockPriceSek']
+        totEndValue += nextTicker['count'] * nextTicker['singleStockPriceSek']
+
+    if totStartValue == 0:
+        return -99999.9
+    else:
+        return ((totEndValue / totStartValue) - 1) * 100
+
+def getHistoricDevelopment(daysback):
+    try:
+        return getFinancialDiffBetween(fetchDailyDataFromMongo(daysback), fetchDailyDataFromMongo(0))
+    except Exception as ex:
+        return -88888.8
+
+def fetchDailyDataFromMongo(daysback):
+
+    global globCollectionDaily
+
+    for a in range(5): # To pass by weekends and such
+        dayAsString = getDayAsStringDaysBack(daysback + a)
+        hits = globCollectionDaily.find({"day": dayAsString})
+        retData = []
+
+        for hit in hits:
+            retData.append(hit)
+
+        if len(retData) > 0:
+            return retData
+
+    return []
+
+@app.route("/tradingpalstorage/getDevelopmentSinceDaysBack", methods=['GET'])
+def getDevelopmentSinceDaysBack():
+    return {"retval": getHistoricDevelopment(int(request.args.get("daysback")))}
 
 @app.route("/tradingpalstorage/getTransactionsLastDays", methods=['GET'])
 def getTransactionsLastDays():
