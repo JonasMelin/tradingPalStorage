@@ -26,7 +26,13 @@ globCollectionDaily = None
 globCollectionFunds = None
 
 class Main():
+
     def __init__(self):
+        self.lastFetchedTickerHash = 0
+        self.transactionsConnectionOk = False
+        self.tickersConnectionOk = False
+
+    def init(self):
         global globCollectionTransactions
         global globCollectionDaily
         global globCollectionFunds
@@ -39,10 +45,7 @@ class Main():
         globCollectionDaily = self.COLLECTIONDaily
         globCollectionFunds = self.COLLECTIONFunds
         self._testMongoConnection(self.MONGO_CLIENT)
-        self.lastFetchedTickerHash = 0
         self.fixIndex()
-        self.transactionsConnectionOk = False
-        self.tickersConnectionOk = False
 
     def _connectDb(self, mongoHost, mongoPort, databaseName, collectionName):
 
@@ -362,9 +365,6 @@ def getStatsLastDays():
 if __name__ == "__main__":
 
     main = Main()
-    #main.updateFundsToMongo(0)
-    #print(fetchFundsFromMongo(1))
-    #print(getHistoricDevelopment(1))
-
+    main.init()
     threading.Thread(target=main.mainLoop).start()
     app.run(host='0.0.0.0', port=5001)
