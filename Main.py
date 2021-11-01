@@ -231,7 +231,7 @@ class Main():
 
 def getDayAsStringDaysBack(daysback):
     day = datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm')) - datetime.timedelta(days=daysback)
-    return  f"{day.year}-{day.month}-{day.day}"
+    return  f"{day.year}-{day.month:02}-{day.day:02}"
 
 def getQueryStartEndFullDays(daysback):
 
