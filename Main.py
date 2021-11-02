@@ -19,7 +19,7 @@ collectionNameDailyProgress = f"daily"
 collectionNameTransactions = f"transactions"
 collectionNameFunds = f"funds"
 URLTickers = "http://192.168.1.50:5000/tradingpal/getAllStocks"
-URLTransactions = "http://192.168.1.50:5000/tradingpal/getFirstChangeLogItem"
+URLTransactions = "http://127.0.0.1:5000/tradingpal/getFirstChangeLogItem"
 
 globCollectionTransactions = None
 globCollectionDaily = None
@@ -240,7 +240,7 @@ def getQueryStartEndFullDays(daysback):
     queryEnd = queryStart + datetime.timedelta(1)
     return queryStart, queryEnd
 
-def getFinancialDiffBetween(startTickersIn, startFunds, endTickersIn, endFunds):
+def getFinancialDiffBetween(startTickersIn, startFunds, endTickersIn, endFunds, onlyCountActiveStocks = True):
 
     totStartValue = 0
     totEndValue = 0
@@ -250,11 +250,15 @@ def getFinancialDiffBetween(startTickersIn, startFunds, endTickersIn, endFunds):
 
     for endTicker in endTickersIn:
         endTickerName = endTicker['ticker']
+        startVal = 0
 
         if endTickerName not in startTickers:
-            continue
+            if onlyCountActiveStocks:
+                continue
+        else:
+            startVal = startTickers[endTickerName]['count'] * startTickers[endTickerName]['singleStockPriceSek']
 
-        totStartValue += startTickers[endTickerName]['count'] * startTickers[endTickerName]['singleStockPriceSek']
+        totStartValue += startVal
         totEndValue += endTicker['count'] * endTicker['singleStockPriceSek']
 
     totStartValue += (startFunds['fundsSek'] if startFunds is not None else 0) - (startFunds['putinSek'] if startFunds is not None else 0)
@@ -265,6 +269,15 @@ def getFinancialDiffBetween(startTickersIn, startFunds, endTickersIn, endFunds):
     else:
         return ((totEndValue / totStartValue) - 1) * 100
 
+def getDevelopmentSinceDate(startDate="2021-10-28"):
+    try:
+        stocksDaysBack, fundsDaysBack = fetchDailyDataFromMongoByDate(startDate)
+        stocksToday, fundsToday = fetchDailyDataFromMongo(1)
+
+        return getFinancialDiffBetween(stocksDaysBack, fundsDaysBack, stocksToday, fundsToday, onlyCountActiveStocks=False)
+    except Exception as ex:
+        return -88888.8
+
 def getHistoricDevelopment(daysback):
     try:
         stocksDaysBack, fundsDaysBack = fetchDailyDataFromMongo(daysback)
@@ -274,12 +287,11 @@ def getHistoricDevelopment(daysback):
     except Exception as ex:
         return -88888.8
 
-def fetchFundsFromMongo(daysback):
+def fetchFundsFromMongo(dayAsString):
     global globCollectionFunds
 
     try:
-
-        fromMongo = globCollectionFunds.find_one({"day": getDayAsStringDaysBack(daysback)})
+        fromMongo = globCollectionFunds.find_one({"day": dayAsString})
 
         if fromMongo is None:
             print("Funds not found in DB.")
@@ -289,6 +301,19 @@ def fetchFundsFromMongo(daysback):
     except Exception as ex:
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Exception when fetching funds from mongo {ex}")
         return None
+
+def fetchDailyDataFromMongoByDate(dayAsString):
+
+    global globCollectionDaily
+
+    hits = globCollectionDaily.find({"day": dayAsString})
+    retData = []
+
+    for hit in hits:
+        retData.append(hit)
+
+    if len(retData) > 0:
+        return retData, fetchFundsFromMongo(dayAsString)
 
 
 def fetchDailyDataFromMongo(daysback):
@@ -305,9 +330,13 @@ def fetchDailyDataFromMongo(daysback):
             retData.append(hit)
 
         if len(retData) > 0:
-            return retData, fetchFundsFromMongo(dayBackToCheck)
+            return retData, fetchFundsFromMongo(dayAsString)
 
     return [], None
+
+@app.route("/tradingpalstorage/getDevelopmentSinceStart", methods=['GET'])
+def getDevelopmentSinceStart():
+    return {"retval": getDevelopmentSinceDate()}
 
 @app.route("/tradingpalstorage/getDevelopmentSinceDaysBack", methods=['GET'])
 def getDevelopmentSinceDaysBack():
