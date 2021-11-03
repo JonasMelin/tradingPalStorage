@@ -271,10 +271,17 @@ def getFinancialDiffBetween(startTickersIn, startFunds, endTickersIn, endFunds, 
 
 def getDevelopmentSinceDate(startDate="2021-10-28"):
     try:
-        stocksDaysBack, fundsDaysBack = fetchDailyDataFromMongoByDate(startDate)
-        stocksToday, fundsToday = fetchDailyDataFromMongo(1)
+        stocksAtStart, fundsAtStart = fetchDailyDataFromMongoByDate(startDate)
+        stocksToday, fundsToday = fetchDailyDataFromMongo(0, allowCrawlingBack=False)
+        stocksYesterday, fundsYesterday = fetchDailyDataFromMongo(1, allowCrawlingBack=True)
+        if (len(stocksToday) >= len(stocksYesterday)) and fundsToday is not None:
+            stocksNow = stocksToday
+            fundsNow = fundsToday
+        else:
+            stocksNow = stocksYesterday
+            fundsNow = fundsYesterday
 
-        return getFinancialDiffBetween(stocksDaysBack, fundsDaysBack, stocksToday, fundsToday, onlyCountActiveStocks=False)
+        return getFinancialDiffBetween(stocksAtStart, fundsAtStart, stocksNow, fundsNow, onlyCountActiveStocks=False)
     except Exception as ex:
         return -88888.8
 
@@ -316,11 +323,11 @@ def fetchDailyDataFromMongoByDate(dayAsString):
         return retData, fetchFundsFromMongo(dayAsString)
 
 
-def fetchDailyDataFromMongo(daysback):
+def fetchDailyDataFromMongo(daysback, allowCrawlingBack = True):
 
     global globCollectionDaily
 
-    for a in range(5): # To pass by weekends and such
+    for a in range(5 if allowCrawlingBack else 1):
         dayBackToCheck = daysback + a
         dayAsString = getDayAsStringDaysBack(dayBackToCheck)
         hits = globCollectionDaily.find({"day": dayAsString})
