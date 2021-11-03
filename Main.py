@@ -8,6 +8,15 @@ import pytz
 import threading
 import copy
 from flask import Flask, request
+import os
+
+PRODUCTION = os.getenv('TP_PROD')
+
+if PRODUCTION is not None and PRODUCTION == "true":
+    print("RUNNING IN PRODUCTION MODE!!")
+else:
+    print("Running in dev mode cause environment variable \"TP_PROD=true\" was not set...")
+    PRODUCTION = None
 
 app = Flask(__name__)
 
@@ -76,6 +85,10 @@ class Main():
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Done (creating index)")
 
     def fetchTransactions(self):
+
+        if PRODUCTION is None:
+            return None
+
         try:
             retData = requests.get(URLTransactions)
 
@@ -128,9 +141,10 @@ class Main():
 
         try:
             transactionsData['date'] = datetime.datetime.strptime(transactionsData['date'], '%Y-%m-%d %H:%M:%S.%f%z')
-            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Writing transactions to mongo: {transactionsData}")
-            self.COLLECTIONTrans.insert(transactionsData)
-            self.updateFundsToMongo(transactionsData['purchaseValueSek'])
+            if PRODUCTION is not None:
+                print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Writing transactions to mongo: {transactionsData}")
+                self.COLLECTIONTrans.insert(transactionsData)
+                self.updateFundsToMongo(transactionsData['purchaseValueSek'])
         except Exception as ex:
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to insert transactions to mongo. {ex}")
 
@@ -155,14 +169,15 @@ class Main():
                 fundsSekFromMongo = fromMongo['fundsSek']
                 putinSekFromMongo = fromMongo['putinSek']
 
-            self.COLLECTIONFunds.update_one(
-                {"day": getDayAsStringDaysBack(0)},
-                {"$set":
-                    {
-                        "fundsSek": fundsSekFromMongo - purchaseValueSek,
-                        "putinSek": putinSekFromMongo
-                    }
-                }, upsert=True)
+            if PRODUCTION is not None:
+                self.COLLECTIONFunds.update_one(
+                    {"day": getDayAsStringDaysBack(0)},
+                    {"$set":
+                        {
+                            "fundsSek": fundsSekFromMongo - purchaseValueSek,
+                            "putinSek": putinSekFromMongo
+                        }
+                    }, upsert=True)
 
         except Exception as ex:
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to update funds in mongo. {ex}")
@@ -183,15 +198,16 @@ class Main():
                     "count": nextTicker['currentStock']['count'],
                     "singleStockPriceSek": nextTicker['singleStockPriceSek']
                 }
-                self.COLLECTIONDaily.update_one(
-                    {"day": entry["day"], "ticker": entry['ticker']},
-                    { "$set":
-                          {
-                              "count": entry["count"],
-                              "singleStockPriceSek": entry["singleStockPriceSek"],
-                              "name": entry["name"]
-                          }
-                    }, upsert=True)
+                if PRODUCTION is not None:
+                    self.COLLECTIONDaily.update_one(
+                        {"day": entry["day"], "ticker": entry['ticker']},
+                        { "$set":
+                              {
+                                  "count": entry["count"],
+                                  "singleStockPriceSek": entry["singleStockPriceSek"],
+                                  "name": entry["name"]
+                              }
+                        }, upsert=True)
 
             except Exception as ex:
                 print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to upsert progress to mongo. {ex}")
@@ -211,7 +227,8 @@ class Main():
                 nextTicker['dateUTC'] = datetime.datetime.strptime(tickerData['updatedUtc'], '%Y-%m-%d %H:%M:%S.%f%z')
                 allElementsForMongo.append(nextTicker)
 
-            self.COLLECTION.insert_many(allElementsForMongo)
+            if PRODUCTION is not None:
+                self.COLLECTION.insert_many(allElementsForMongo)
         except Exception as ex:
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to insert tickers to mongo. {ex}")
 
