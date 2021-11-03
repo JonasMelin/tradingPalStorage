@@ -28,6 +28,7 @@ collectionNameTickers = f"tickers"
 collectionNameDailyProgress = f"daily"
 collectionNameTransactions = f"transactions"
 collectionNameFunds = f"funds"
+URLTickerCurrentValue = "http://192.168.1.50:5000/tradingpal/getTickerValue"
 URLTickers = "http://192.168.1.50:5000/tradingpal/getAllStocks"
 URLTransactions = "http://127.0.0.1:5000/tradingpal/getFirstChangeLogItem"
 
@@ -210,6 +211,35 @@ class Main():
             except Exception as ex:
                 print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to upsert progress to mongo. {ex}")
 
+
+    def TEMPSUPERHACK(self):
+    # Run once to update database, then remove this function!
+        currLookup = {}
+
+        for next in self.COLLECTIONDaily.find():
+
+            if 'currency' in next:
+                currLookup[next['ticker']] = next['currency']
+
+        for next in self.COLLECTIONDaily.find():
+
+            if 'currency' not in next:
+                if next['ticker'] in currLookup:
+                    self.COLLECTIONDaily.update_one(
+                        {
+                            "day": next['day'],
+                            "ticker": next['ticker']
+                        },
+                        {"$set":
+                            {
+                                "count": next['count'],
+                                "singleStockPriceSek": next['singleStockPriceSek'],
+                                "name": next['name'],
+                                "currency": currLookup[next['ticker']]
+                            }
+                        }, upsert=True)
+
+
     def writeTickersToMongo(self, tickerData):
 
         if tickerData is None:
@@ -356,11 +386,61 @@ def fetchDailyDataFromMongo(daysback, allowCrawlingBack = True):
 
     return [], None
 
+def addCurrentStockValueToStocks(stocks):
+
+    if stocks is None or len(stocks) == 0:
+        return
+
+    try:
+        for stock in stocks:
+            if 'currency' not in stock or 'ticker' not in stock:
+                continue
+
+            URL = f"{URLTickerCurrentValue}?currency={stock['currency']}&ticker={stock['ticker']}"
+            retData = requests.get(URL)
+
+            if retData.status_code != 200:
+                print(f"Failed to get ticker: {URL}")
+                continue
+
+            tickerData = json.loads(retData.content)
+            stock['priceInSekNow'] = tickerData['price_in_sek']
+
+    except Exception as ex:
+        print(f"Error in addCurrentStockValueToStocks(): {ex}")
+
+
+
 def calcTpIndexSince(date):
     startStocks, startFunds = fetchDailyDataFromMongoByDate(date)
     todayStocks, todayFunds = fetchDailyDataFromMongo(1, allowCrawlingBack=True)
+    addCurrentStockValueToStocks(startStocks)
 
+    totStartStockValueTodaysCourse = 0
+    for stock in startStocks:
+        if 'priceInSekNow' not in stock or 'count' not in stock:
+            print(f"(a) warn. Mal formatted entry from mongo {stock}")
+            continue
+        totStartStockValueTodaysCourse += stock['priceInSekNow'] * stock['count']
 
+    totTodayStockValue = 0
+    for stock in todayStocks:
+        if 'singleStockPriceSek' not in stock or 'count' not in stock:
+            print(f"(b) warn. Mal formatted entry from mongo {stock}")
+            continue
+        totTodayStockValue += stock['singleStockPriceSek'] * stock['count']
+
+    totTodayStockValue += todayFunds['fundsSek'] - todayFunds['putinSek']
+    totStartStockValueTodaysCourse += startFunds['fundsSek'] - startFunds['putinSek']
+
+    if totStartStockValueTodaysCourse == 0:
+        return -99999.9
+    else:
+        return ((totTodayStockValue / totStartStockValueTodaysCourse) - 1) * 100
+
+@app.route("/tradingpalstorage/getTpIndex", methods=['GET'])
+def getTpIndex():
+    return {"retval": calcTpIndexSince(DAY_ZERO)}
 
 @app.route("/tradingpalstorage/getDevelopmentSinceStart", methods=['GET'])
 def getDevelopmentSinceStart():
@@ -423,5 +503,10 @@ if __name__ == "__main__":
 
     main = Main()
     main.init()
+    #main.TEMPSUPERHACK()
+    #exit(0)
+    #print(calcTpIndexSince("2021-10-28"))
+
+    #exit(0)
     threading.Thread(target=main.mainLoop).start()
     app.run(host='0.0.0.0', port=5001)
