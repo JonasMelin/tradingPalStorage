@@ -20,6 +20,7 @@ else:
 
 app = Flask(__name__)
 
+DAY_ZERO = "2021-10-28"
 mongoPort = 27018
 mongoHost = "192.168.1.50"
 databaseName = "TP"
@@ -191,21 +192,18 @@ class Main():
 
         for nextTicker in (tickerData)['list']:
             try:
-                entry = {
-                    "ticker": nextTicker['tickerName'],
-                    "name": nextTicker['currentStock']['name'],
-                    "day": str(datetime.datetime.now(pytz.timezone('Europe/Stockholm')).date()),
-                    "count": nextTicker['currentStock']['count'],
-                    "singleStockPriceSek": nextTicker['singleStockPriceSek']
-                }
                 if PRODUCTION is not None:
                     self.COLLECTIONDaily.update_one(
-                        {"day": entry["day"], "ticker": entry['ticker']},
+                        {
+                            "day": str(datetime.datetime.now(pytz.timezone('Europe/Stockholm')).date()),
+                            "ticker": nextTicker['tickerName']
+                        },
                         { "$set":
                               {
-                                  "count": entry["count"],
-                                  "singleStockPriceSek": entry["singleStockPriceSek"],
-                                  "name": entry["name"]
+                                  "count": nextTicker['currentStock']['count'],
+                                  "singleStockPriceSek": nextTicker['singleStockPriceSek'],
+                                  "name": nextTicker['currentStock']['name'],
+                                  "currency": nextTicker['currancy']
                               }
                         }, upsert=True)
 
@@ -286,7 +284,7 @@ def getFinancialDiffBetween(startTickersIn, startFunds, endTickersIn, endFunds, 
     else:
         return ((totEndValue / totStartValue) - 1) * 100
 
-def getDevelopmentSinceDate(startDate="2021-10-28"):
+def getDevelopmentSinceDate(startDate):
     try:
         stocksAtStart, fundsAtStart = fetchDailyDataFromMongoByDate(startDate)
         stocksToday, fundsToday = fetchDailyDataFromMongo(0, allowCrawlingBack=False)
@@ -358,9 +356,15 @@ def fetchDailyDataFromMongo(daysback, allowCrawlingBack = True):
 
     return [], None
 
+def calcTpIndexSince(date):
+    startStocks, startFunds = fetchDailyDataFromMongoByDate(date)
+    todayStocks, todayFunds = fetchDailyDataFromMongo(1, allowCrawlingBack=True)
+
+
+
 @app.route("/tradingpalstorage/getDevelopmentSinceStart", methods=['GET'])
 def getDevelopmentSinceStart():
-    return {"retval": getDevelopmentSinceDate()}
+    return {"retval": getDevelopmentSinceDate(DAY_ZERO)}
 
 @app.route("/tradingpalstorage/getDevelopmentSinceDaysBack", methods=['GET'])
 def getDevelopmentSinceDaysBack():
