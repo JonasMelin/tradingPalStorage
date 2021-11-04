@@ -270,16 +270,16 @@ class Main():
         sys.stdout.flush()
 
         while True:
-            currentHour = datetime.datetime.now().hour
-            tickers = self.fetchTickers()
             self.writeTransactionsToMongo(self.fetchTransactions())
+            tickers = self.fetchTickers()
             self.writeTickersToMongo(tickers)
+            self.writeDailyProgressToMongo(tickers)
 
-            if currentHour != lastHour:
-                lastHour = currentHour
-                self.writeDailyProgressToMongo(tickers)
+            if datetime.datetime.now().hour != lastHour:
+                lastHour = datetime.datetime.now().hour
                 self.updateFundsToMongo(0)  # purchase of 0 sek has no impact in Db, but will copy records from yesterday to today
                 tpIndex = calcTpIndexSince(DAY_ZERO)
+
             sys.stdout.flush()
             time.sleep(60)
 
