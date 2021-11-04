@@ -18,6 +18,8 @@ else:
     print("Running in dev mode cause environment variable \"TP_PROD=true\" was not set...")
     PRODUCTION = None
 
+tpIndex = -89999
+
 app = Flask(__name__)
 
 DAY_ZERO = "2021-10-28"
@@ -262,15 +264,22 @@ class Main():
 
     def mainLoop(self):
 
+        global tpIndex
+        lastHour = -1
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Starting...")
         sys.stdout.flush()
 
         while True:
+            currentHour = datetime.datetime.now().hour
             tickers = self.fetchTickers()
-            self.writeDailyProgressToMongo(tickers)
-            self.writeTickersToMongo(tickers)
             self.writeTransactionsToMongo(self.fetchTransactions())
-            self.updateFundsToMongo(0)  # purchase of 0 sek has no impact in Db, but will copy records from yesterday to today
+            self.writeTickersToMongo(tickers)
+
+            if currentHour != lastHour:
+                lastHour = currentHour
+                self.writeDailyProgressToMongo(tickers)
+                self.updateFundsToMongo(0)  # purchase of 0 sek has no impact in Db, but will copy records from yesterday to today
+                tpIndex = calcTpIndexSince(DAY_ZERO)
             sys.stdout.flush()
             time.sleep(60)
 
@@ -412,35 +421,41 @@ def addCurrentStockValueToStocks(stocks):
 
 
 def calcTpIndexSince(date):
-    startStocks, startFunds = fetchDailyDataFromMongoByDate(date)
-    todayStocks, todayFunds = fetchDailyDataFromMongo(1, allowCrawlingBack=True)
-    addCurrentStockValueToStocks(startStocks)
+    try:
+        startStocks, startFunds = fetchDailyDataFromMongoByDate(date)
+        todayStocks, todayFunds = fetchDailyDataFromMongo(1, allowCrawlingBack=True)
+        addCurrentStockValueToStocks(startStocks)
 
-    totStartStockValueTodaysCourse = 0
-    for stock in startStocks:
-        if 'priceInSekNow' not in stock or 'count' not in stock:
-            print(f"(a) warn. Mal formatted entry from mongo {stock}")
-            continue
-        totStartStockValueTodaysCourse += stock['priceInSekNow'] * stock['count']
+        totStartStockValueTodaysCourse = 0
+        for stock in startStocks:
+            if 'priceInSekNow' not in stock or 'count' not in stock:
+                print(f"(a) warn. TpIndex, start stocks could not be looked up in todays value {stock}")
+                continue
+            totStartStockValueTodaysCourse += stock['priceInSekNow'] * stock['count']
 
-    totTodayStockValue = 0
-    for stock in todayStocks:
-        if 'singleStockPriceSek' not in stock or 'count' not in stock:
-            print(f"(b) warn. Mal formatted entry from mongo {stock}")
-            continue
-        totTodayStockValue += stock['singleStockPriceSek'] * stock['count']
+        totTodayStockValue = 0
+        for stock in todayStocks:
+            if 'singleStockPriceSek' not in stock or 'count' not in stock:
+                print(f"(b) warn. Mal formatted entry from mongo {stock}")
+                continue
+            totTodayStockValue += stock['singleStockPriceSek'] * stock['count']
 
-    totTodayStockValue += todayFunds['fundsSek'] - todayFunds['putinSek']
-    totStartStockValueTodaysCourse += startFunds['fundsSek'] - startFunds['putinSek']
+        totTodayStockValue += todayFunds['fundsSek'] - todayFunds['putinSek']
+        totStartStockValueTodaysCourse += startFunds['fundsSek'] - startFunds['putinSek']
 
-    if totStartStockValueTodaysCourse == 0:
-        return -99999.9
-    else:
-        return ((totTodayStockValue / totStartStockValueTodaysCourse) - 1) * 100
+        if totStartStockValueTodaysCourse == 0:
+            return -99999.9
+        else:
+            return ((totTodayStockValue / totStartStockValueTodaysCourse) - 1) * 100
+    except Exception as ex:
+        print(f"Exception in calcTpIndexSince {ex}")
+        return -77777
+
 
 @app.route("/tradingpalstorage/getTpIndex", methods=['GET'])
 def getTpIndex():
-    return {"retval": calcTpIndexSince(DAY_ZERO)}
+    global tpIndex
+    return {"retval": tpIndex}
 
 @app.route("/tradingpalstorage/getDevelopmentSinceStart", methods=['GET'])
 def getDevelopmentSinceStart():
