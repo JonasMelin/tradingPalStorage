@@ -166,12 +166,14 @@ class Main():
 
             fundsSekFromMongo = 0
             putinSekFromMongo = 0
+            yieldFromMongo = 0
 
             if fromMongo is None:
                 print("Initializing funds collection in mongo...")
             else:
                 fundsSekFromMongo = fromMongo['fundsSek']
                 putinSekFromMongo = fromMongo['putinSek']
+                yieldFromMongo = fromMongo['yield']
 
             if PRODUCTION is not None:
                 self.COLLECTIONFunds.update_one(
@@ -179,7 +181,8 @@ class Main():
                     {"$set":
                         {
                             "fundsSek": fundsSekFromMongo - purchaseValueSek,
-                            "putinSek": putinSekFromMongo
+                            "putinSek": putinSekFromMongo,
+                            "yield": yieldFromMongo
                         }
                     }, upsert=True)
 
@@ -212,35 +215,6 @@ class Main():
 
             except Exception as ex:
                 print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to upsert progress to mongo. {ex}")
-
-
-    def TEMPSUPERHACK(self):
-    # Run once to update database, then remove this function!
-        currLookup = {}
-
-        for next in self.COLLECTIONDaily.find():
-
-            if 'currency' in next:
-                currLookup[next['ticker']] = next['currency']
-
-        for next in self.COLLECTIONDaily.find():
-
-            if 'currency' not in next:
-                if next['ticker'] in currLookup:
-                    self.COLLECTIONDaily.update_one(
-                        {
-                            "day": next['day'],
-                            "ticker": next['ticker']
-                        },
-                        {"$set":
-                            {
-                                "count": next['count'],
-                                "singleStockPriceSek": next['singleStockPriceSek'],
-                                "name": next['name'],
-                                "currency": currLookup[next['ticker']]
-                            }
-                        }, upsert=True)
-
 
     def writeTickersToMongo(self, tickerData):
 
@@ -440,8 +414,8 @@ def calcTpIndexSince(date):
                 continue
             totTodayStockValue += stock['singleStockPriceSek'] * stock['count']
 
-        totTodayStockValue += todayFunds['fundsSek'] - todayFunds['putinSek']
-        totStartStockValueTodaysCourse += startFunds['fundsSek'] - startFunds['putinSek']
+        totTodayStockValue += todayFunds['fundsSek'] - todayFunds['putinSek'] - todayFunds['yield']
+        totStartStockValueTodaysCourse += startFunds['fundsSek'] - startFunds['putinSek'] - startFunds['yield']
 
         if totStartStockValueTodaysCourse == 0:
             return -99999.9
@@ -518,10 +492,5 @@ if __name__ == "__main__":
 
     main = Main()
     main.init()
-    #main.TEMPSUPERHACK()
-    #exit(0)
-    #print(calcTpIndexSince("2021-10-28"))
-
-    #exit(0)
     threading.Thread(target=main.mainLoop).start()
     app.run(host='0.0.0.0', port=5001)
