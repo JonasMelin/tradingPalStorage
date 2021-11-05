@@ -351,6 +351,29 @@ def fetchDailyDataFromMongoByDate(dayAsString):
         return retData, fetchFundsFromMongo(dayAsString)
 
 
+def fetchDailyDataMostRecent():
+    global globCollectionDaily
+
+    MAX_DAYS_BACK = 5
+
+    retData = {}
+    latestFunds = None
+
+    for a in range(MAX_DAYS_BACK):
+        dayBackToCheck = MAX_DAYS_BACK - a - 1
+        dayAsString = getDayAsStringDaysBack(dayBackToCheck)
+        hits = globCollectionDaily.find({"day": dayAsString})
+
+
+        for hit in hits:
+            retData[hit['ticker']] = hit
+
+        if len(retData) > 0:
+            latestFunds = fetchFundsFromMongo(dayAsString)
+
+    return list(retData.values()), latestFunds
+
+
 def fetchDailyDataFromMongo(daysback, allowCrawlingBack = True):
 
     global globCollectionDaily
@@ -397,7 +420,7 @@ def addCurrentStockValueToStocks(stocks):
 def calcTpIndexSince(date):
     try:
         startStocks, startFunds = fetchDailyDataFromMongoByDate(date)
-        todayStocks, todayFunds = fetchDailyDataFromMongo(1, allowCrawlingBack=True)
+        todayStocks, todayFunds = fetchDailyDataMostRecent()
         addCurrentStockValueToStocks(startStocks)
 
         totStartStockValueTodaysCourse = 0
