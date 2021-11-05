@@ -19,6 +19,13 @@ else:
     PRODUCTION = None
 
 tpIndex = -89999
+tpIndexLast = -89999
+tpIndexTrend = 0
+
+developmentSinceDateLast = -89999
+developmentSinceLastTrend = 0
+
+developmentSinceDaysBack = {}
 
 app = Flask(__name__)
 
@@ -415,8 +422,6 @@ def addCurrentStockValueToStocks(stocks):
     except Exception as ex:
         print(f"Error in addCurrentStockValueToStocks(): {ex}")
 
-
-
 def calcTpIndexSince(date):
     try:
         startStocks, startFunds = fetchDailyDataFromMongoByDate(date)
@@ -451,16 +456,52 @@ def calcTpIndexSince(date):
 
 @app.route("/tradingpalstorage/getTpIndex", methods=['GET'])
 def getTpIndex():
-    global tpIndex
-    return {"retval": tpIndex}
+    global tpIndex, tpIndexLast, tpIndexTrend
+
+    if tpIndex > tpIndexLast:
+        tpIndexTrend = 1
+    elif tpIndex < tpIndexLast:
+        tpIndexTrend = -1
+
+    tpIndexLast = tpIndex
+
+    return {"retval": tpIndex, "trend": tpIndexTrend}
 
 @app.route("/tradingpalstorage/getDevelopmentSinceStart", methods=['GET'])
 def getDevelopmentSinceStart():
-    return {"retval": getDevelopmentSinceDate(DAY_ZERO)}
+    global developmentSinceDateLast, developmentSinceLastTrend
+
+    newRetVal = getDevelopmentSinceDate(DAY_ZERO)
+
+    if newRetVal > developmentSinceDateLast:
+        developmentSinceLastTrend = 1
+    elif newRetVal < developmentSinceDateLast:
+        developmentSinceLastTrend = -1
+
+    developmentSinceDateLast = newRetVal
+
+    return {"retval": newRetVal, "trend": developmentSinceLastTrend}
 
 @app.route("/tradingpalstorage/getDevelopmentSinceDaysBack", methods=['GET'])
 def getDevelopmentSinceDaysBack():
-    return {"retval": getHistoricDevelopment(int(request.args.get("daysback")))}
+
+    global developmentSinceDaysBack
+    daysback = int(request.args.get("daysback"))
+
+    if daysback not in developmentSinceDaysBack:
+        developmentSinceDaysBack[daysback] = {"lastRetVal": -89999, "trend": 0}
+
+    newRetVal = getHistoricDevelopment(daysback)
+    historicalData = developmentSinceDaysBack[daysback]
+
+    if newRetVal > historicalData["lastRetVal"]:
+        historicalData["trend"] = 1
+    elif newRetVal < historicalData["lastRetVal"]:
+        historicalData["trend"] = -1
+
+    historicalData["lastRetVal"] = newRetVal
+
+    return {"retval": newRetVal, "trend": historicalData["trend"]}
 
 @app.route("/tradingpalstorage/getTransactionsLastDays", methods=['GET'])
 def getTransactionsLastDays():
