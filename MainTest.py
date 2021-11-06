@@ -6,7 +6,7 @@ getLastTransactionRawReply = "{\n    \"boughtAt\": 2.88,\n    \"count\": 202,\n 
 
 @patch('Main.requests')
 def testFetchTickers(requestsMock):
-    objUnderTest = Main.Main()
+    objUnderTest = Main.MongoHandler()
     requestsMock.get.return_value.status_code = 200
     requestsMock.get.return_value.content = getAllStocksRawReply
 
@@ -30,7 +30,7 @@ def testFetchTickers(requestsMock):
 
 @patch('Main.requests')
 def testFetchTransactions(requestsMock):
-    objUnderTest = Main.Main()
+    objUnderTest = Main.MongoHandler()
     requestsMock.get.return_value.status_code = 200
     requestsMock.get.return_value.content = getLastTransactionRawReply
 
@@ -42,7 +42,7 @@ def testFetchTransactions(requestsMock):
     return transactions
 
 def testWriteTransactions():
-    objUnderTest = Main.Main()
+    objUnderTest = Main.MongoHandler()
     objUnderTest.COLLECTIONTrans = MagicMock()
     objUnderTest.updateFundsToMongo = MagicMock()
 
