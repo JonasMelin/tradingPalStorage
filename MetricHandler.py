@@ -1,20 +1,15 @@
-from pymongo import ASCENDING, MongoClient
-import time, requests, json, datetime, sys, pytz, copy, os
+import time, requests, json, datetime, sys, pytz, copy, DbAccess
 
 DAY_ZERO = "2021-10-28"
-mongoPort = 27018
-mongoHost = "192.168.1.50"
-databaseName = "TP"
-collectionNameTickers = f"tickers"
-collectionNameDailyProgress = f"daily"
-collectionNameTransactions = f"transactions"
-collectionNameFunds = f"funds"
 URLTickerCurrentValue = "http://192.168.1.50:5000/tradingpal/getTickerValue"
 URLTickers = "http://192.168.1.50:5000/tradingpal/getAllStocks"
 URLTransactions = "http://127.0.0.1:5000/tradingpal/getFirstChangeLogItem"
 
-class MongoHandler():
+class MetricHandler():
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def __init__(self):
         self.tpIndex = -89999
         self.tpIndexTrend = 0
@@ -25,57 +20,19 @@ class MongoHandler():
         self.lastFetchedTickerHash = 0
         self.transactionsConnectionOk = False
         self.tickersConnectionOk = False
+        self.dbAccess = None
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def init(self):
+        self.dbAccess = DbAccess.DbAccess()
+        self.dbAccess.init()
 
-        self.PRODUCTION = os.getenv('TP_PROD')
-
-        if self.PRODUCTION is not None and self.PRODUCTION == "true":
-            print("RUNNING IN PRODUCTION MODE!!")
-        else:
-            print("Running in dev mode cause environment variable \"TP_PROD=true\" was not set...")
-            self.PRODUCTION = None
-
-
-        self.DB, self.COLLECTION, self.MONGO_CLIENT = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameTickers)
-        self.DBTrans, self.COLLECTIONTrans, self.MONGO_CLIENT_TRANS = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameTransactions)
-        self.DBDaily, self.COLLECTIONDaily, self.MONGO_CLIENT_DAILY = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameDailyProgress)
-        self.DBFunds, self.COLLECTIONFunds, self.MONGO_CLIENT_FUNDS = self._connectDb(mongoHost, mongoPort, databaseName, collectionNameFunds)
-        self._testMongoConnection(self.MONGO_CLIENT)
-        self.fixIndex()
-
-    def _connectDb(self, mongoHost, mongoPort, databaseName, collectionName):
-
-        dbConnection = MongoClient(host=mongoHost, port=mongoPort)
-        db = dbConnection[databaseName]
-        collection = db[collectionName]
-        return db, collection, dbConnection
-
-    def _testMongoConnection(self, dbConnection):
-
-        try:
-            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Mongo connection OK! Version: {dbConnection.server_info()['version']}")
-        except Exception as ex:
-            raise ValueError(f"{datetime.datetime.utcnow()} Mongo connection FAILED! (B)  {ex}")
-
-    def fixIndex(self):
-
-        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Creating index")
-
-        self.DB[collectionNameDailyProgress].create_index([('day', ASCENDING), ('ticker', ASCENDING)], unique=True)
-        self.DB[collectionNameFunds].create_index([('day', ASCENDING)], unique=True)
-
-        self.DB[collectionNameTransactions].create_index([('date', ASCENDING)])
-
-        self.DB[collectionNameTickers].create_index([('tickerName', ASCENDING)])
-        self.DB[collectionNameTickers].create_index([('dateUTC', ASCENDING)])
-        self.DB[collectionNameTickers].create_index(name='tickerDate', keys=[('tickerName', ASCENDING), ('dateUTC', ASCENDING)])
-        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Done (creating index)")
-
+    # ##############################################################################################################
+    # Tested!
+    # ##############################################################################################################
     def fetchTransactions(self):
-
-        if self.PRODUCTION is None:
-            return None
 
         try:
             retData = requests.get(URLTransactions)
@@ -95,6 +52,9 @@ class MongoHandler():
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to fetch transactions: {ex}")
             return None
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def fetchTickers(self):
 
         try:
@@ -122,6 +82,9 @@ class MongoHandler():
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to fetch tickers: {ex}")
             return None
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def writeTransactionsToMongo(self, transactionsData):
 
         if transactionsData is None or len(transactionsData) == 0:
@@ -129,13 +92,15 @@ class MongoHandler():
 
         try:
             transactionsData['date'] = datetime.datetime.strptime(transactionsData['date'], '%Y-%m-%d %H:%M:%S.%f%z')
-            if self.PRODUCTION is not None:
-                print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Writing transactions to mongo: {transactionsData}")
-                self.COLLECTIONTrans.insert(transactionsData)
-                self.updateFundsToMongo(transactionsData['purchaseValueSek'])
+            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Writing transactions to mongo: {transactionsData}")
+            self.dbAccess.insert_one(transactionsData, DbAccess.Collection.Transactions)
+            self.updateFundsToMongo(transactionsData['purchaseValueSek'])
         except Exception as ex:
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to insert transactions to mongo. {ex}")
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def updateFundsToMongo(self, purchaseValueSek):
 
         try:
@@ -144,7 +109,7 @@ class MongoHandler():
 
             fromMongo = None
             for a in range(365):
-                fromMongo = self.COLLECTIONFunds.find_one({"day": self.getDayAsStringDaysBack(a)})
+                fromMongo = self.dbAccess.find_one({"day": self.getDayAsStringDaysBack(a)}, DbAccess.Collection.Funds)
                 if fromMongo is not None:
                     break
 
@@ -159,20 +124,23 @@ class MongoHandler():
                 putinSekFromMongo = fromMongo['putinSek']
                 yieldFromMongo = fromMongo['yield']
 
-            if self.PRODUCTION is not None:
-                self.COLLECTIONFunds.update_one(
-                    {"day": self.getDayAsStringDaysBack(0)},
-                    {"$set":
-                        {
-                            "fundsSek": fundsSekFromMongo - purchaseValueSek,
-                            "putinSek": putinSekFromMongo,
-                            "yield": yieldFromMongo
-                        }
-                    }, upsert=True)
+            self.dbAccess.update_one(
+                {"day": self.getDayAsStringDaysBack(0)},
+                {"$set":
+                    {
+                        "fundsSek": fundsSekFromMongo - purchaseValueSek,
+                        "putinSek": putinSekFromMongo,
+                        "yield": yieldFromMongo
+                    }
+                },
+                DbAccess.Collection.Funds)
 
         except Exception as ex:
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to update funds in mongo. {ex}")
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def writeDailyProgressToMongo(self, tickerData):
 
         if tickerData is None or 'list' not in tickerData:
@@ -182,24 +150,27 @@ class MongoHandler():
 
         for nextTicker in (tickerData)['list']:
             try:
-                if self.PRODUCTION is not None:
-                    self.COLLECTIONDaily.update_one(
-                        {
-                            "day": str(datetime.datetime.now(pytz.timezone('Europe/Stockholm')).date()),
-                            "ticker": nextTicker['tickerName']
-                        },
-                        { "$set":
-                              {
-                                  "count": nextTicker['currentStock']['count'],
-                                  "singleStockPriceSek": nextTicker['singleStockPriceSek'],
-                                  "name": nextTicker['currentStock']['name'],
-                                  "currency": nextTicker['currancy']
-                              }
-                        }, upsert=True)
+                self.dbAccess.update_one(
+                    {
+                        "day": str(datetime.datetime.now(pytz.timezone('Europe/Stockholm')).date()),
+                        "ticker": nextTicker['tickerName']
+                    },
+                    { "$set":
+                          {
+                              "count": nextTicker['currentStock']['count'],
+                              "singleStockPriceSek": nextTicker['singleStockPriceSek'],
+                              "name": nextTicker['currentStock']['name'],
+                              "currency": nextTicker['currancy']
+                          }
+                    },
+                    DbAccess.Collection.DailyProgress)
 
             except Exception as ex:
                 print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to upsert progress to mongo. {ex}")
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def writeTickersToMongo(self, tickerData):
 
         if tickerData is None:
@@ -215,16 +186,21 @@ class MongoHandler():
                 nextTicker['dateUTC'] = datetime.datetime.strptime(tickerData['updatedUtc'], '%Y-%m-%d %H:%M:%S.%f%z')
                 allElementsForMongo.append(nextTicker)
 
-            if self.PRODUCTION is not None:
-                self.COLLECTION.insert_many(allElementsForMongo)
+            self.dbAccess.insert_many(allElementsForMongo, DbAccess.Collection.Tickers)
         except Exception as ex:
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to insert tickers to mongo. {ex}")
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def getDayAsStringDaysBack(self, daysback):
 
         day = datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm')) - datetime.timedelta(days=daysback)
         return  f"{day.year}-{day.month:02}-{day.day:02}"
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def getQueryStartEndFullDays(self, daysback):
 
         queryDay = datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm')) - datetime.timedelta(days=daysback)
@@ -232,6 +208,9 @@ class MongoHandler():
         queryEnd = queryStart + datetime.timedelta(1)
         return queryStart, queryEnd
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def getFinancialDiffBetween(self, startTickersIn, startFunds, endTickersIn, endFunds, onlyCountActiveStocks = True):
 
         totStartValue = 0
@@ -261,6 +240,9 @@ class MongoHandler():
         else:
             return ((totEndValue / totStartValue) - 1) * 100
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def getDevelopmentSinceDate(self, startDate):
 
         try:
@@ -278,6 +260,9 @@ class MongoHandler():
         except Exception as ex:
             return -88888.8
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def getHistoricDevelopment(self, daysback):
 
         try:
@@ -288,10 +273,13 @@ class MongoHandler():
         except Exception as ex:
             return -88888.8
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def fetchFundsFromMongo(self, dayAsString):
 
         try:
-            fromMongo = self.COLLECTIONFunds.find_one({"day": dayAsString})
+            fromMongo = self.dbAccess.find_one({"day": dayAsString}, DbAccess.Collection.Funds)
 
             if fromMongo is None:
                 print("Funds not found in DB.")
@@ -302,9 +290,12 @@ class MongoHandler():
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Exception when fetching funds from mongo {ex}")
             return None
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def fetchDailyDataFromMongoByDate(self, dayAsString):
 
-        hits = self.COLLECTIONDaily.find({"day": dayAsString})
+        hits = self.dbAccess.find({"day": dayAsString}, DbAccess.Collection.DailyProgress)
         retData = []
 
         for hit in hits:
@@ -313,7 +304,9 @@ class MongoHandler():
         if len(retData) > 0:
             return retData, self.fetchFundsFromMongo(dayAsString)
 
-
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def fetchDailyDataMostRecent(self):
 
         MAX_DAYS_BACK = 5
@@ -324,7 +317,7 @@ class MongoHandler():
         for a in range(MAX_DAYS_BACK):
             dayBackToCheck = MAX_DAYS_BACK - a - 1
             dayAsString = self.getDayAsStringDaysBack(dayBackToCheck)
-            hits = self.COLLECTIONDaily.find({"day": dayAsString})
+            hits = self.dbAccess.find({"day": dayAsString}, DbAccess.Collection.DailyProgress)
 
 
             for hit in hits:
@@ -335,13 +328,15 @@ class MongoHandler():
 
         return list(retData.values()), latestFunds
 
-
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def fetchDailyDataFromMongo(self, daysback, allowCrawlingBack = True):
 
         for a in range(5 if allowCrawlingBack else 1):
             dayBackToCheck = daysback + a
             dayAsString = self.getDayAsStringDaysBack(dayBackToCheck)
-            hits = self.COLLECTIONDaily.find({"day": dayAsString})
+            hits = self.dbAccess.find({"day": dayAsString}, DbAccess.Collection.DailyProgress)
             retData = []
 
             for hit in hits:
@@ -352,6 +347,9 @@ class MongoHandler():
 
         return [], None
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def addCurrentStockValueToStocks(self, stocks):
 
         if stocks is None or len(stocks) == 0:
@@ -375,6 +373,9 @@ class MongoHandler():
         except Exception as ex:
             print(f"Error in addCurrentStockValueToStocks(): {ex}")
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def calcTpIndexSince(self, date):
 
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} calcTpIndexSince...")
@@ -412,6 +413,9 @@ class MongoHandler():
             print(f"Exception in calcTpIndexSince {ex}")
             return -77777
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def getTpIndexWithTrend(self):
 
         if self.tpIndex > self.tpIndexLast:
@@ -423,6 +427,9 @@ class MongoHandler():
 
         return self.tpIndex, self.tpIndexTrend
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def getDevelopmentWithTrend(self, daysback):
 
         if daysback is None or daysback < 0:
@@ -443,6 +450,9 @@ class MongoHandler():
 
         return newRetVal, historicalData["trend"]
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def getDevelopmentSinceStartWithTrend(self):
 
         newRetVal = self.getDevelopmentSinceDate(DAY_ZERO)
@@ -456,6 +466,9 @@ class MongoHandler():
 
         return newRetVal, self.developmentSinceLastTrend
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def getTransactionsLastDays(self, daysback):
 
         retval = []
@@ -465,7 +478,7 @@ class MongoHandler():
 
         try:
             queryStart, queryEnd = self.getQueryStartEndFullDays(daysback)
-            hits = self.COLLECTIONTrans.find({"date": {"$gte": queryStart, "$lte": queryEnd}})
+            hits = self.dbAccess.find({"date": {"$gte": queryStart, "$lte": queryEnd}}, DbAccess.Collection.Transactions)
 
             for hit in hits:
                 del (hit['_id'])
@@ -478,6 +491,9 @@ class MongoHandler():
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))}. getTransactionsLastDays: Could not fetch data from mongo, {ex}")
             return retval
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def getStatsLastDays(self, daysback):
 
         if daysback is None or daysback < 0:
@@ -487,7 +503,7 @@ class MongoHandler():
             _, queryEnd = self.getQueryStartEndFullDays(0)
             queryStart, _ = self.getQueryStartEndFullDays(daysback)
 
-            hits = self.COLLECTIONTrans.find({"date": {"$gte": queryStart, "$lte": queryEnd}})
+            hits = self.dbAccess.find({"date": {"$gte": queryStart, "$lte": queryEnd}}, DbAccess.Collection.Transactions)
 
             sold = 0
             bought = 0
@@ -500,6 +516,9 @@ class MongoHandler():
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))}. getTurnoverLastDays: Could not fetch data from mongo, {ex}")
             return None
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def mainLoop(self):
 
         lastHour = -1
