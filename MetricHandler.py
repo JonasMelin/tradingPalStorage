@@ -53,7 +53,7 @@ class MetricHandler():
             return None
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def fetchTickers(self):
 
@@ -83,9 +83,9 @@ class MetricHandler():
             return None
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
-    def writeTransactionsToMongo(self, transactionsData):
+    def writeTransactionsToMongo(self, transactionsData: dict):
 
         if transactionsData is None or len(transactionsData) == 0:
             return
@@ -99,9 +99,9 @@ class MetricHandler():
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to insert transactions to mongo. {ex}")
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
-    def updateFundsToMongo(self, purchaseValueSek):
+    def updateFundsToMongo(self, purchaseValueSek: int):
 
         try:
             if purchaseValueSek != 0:
@@ -139,9 +139,9 @@ class MetricHandler():
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to update funds in mongo. {ex}")
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
-    def writeDailyProgressToMongo(self, tickerData):
+    def writeDailyProgressToMongo(self, tickerData: dict):
 
         if tickerData is None or 'list' not in tickerData:
             return
@@ -169,9 +169,9 @@ class MetricHandler():
                 print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to upsert progress to mongo. {ex}")
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
-    def writeTickersToMongo(self, tickerData):
+    def writeTickersToMongo(self, tickerData: dict):
 
         if tickerData is None:
             return
@@ -191,17 +191,17 @@ class MetricHandler():
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to insert tickers to mongo. {ex}")
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
-    def getDayAsStringDaysBack(self, daysback):
+    def getDayAsStringDaysBack(self, daysback: int):
 
         day = datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm')) - datetime.timedelta(days=daysback)
         return  f"{day.year}-{day.month:02}-{day.day:02}"
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
-    def getQueryStartEndFullDays(self, daysback):
+    def getQueryStartEndFullDays(self, daysback: int):
 
         queryDay = datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm')) - datetime.timedelta(days=daysback)
         queryStart = queryDay.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -209,9 +209,12 @@ class MetricHandler():
         return queryStart, queryEnd
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def getFinancialDiffBetween(self, startTickersIn, startFunds, endTickersIn, endFunds, onlyCountActiveStocks = True):
+
+        if startTickersIn is None or startFunds is None or endTickersIn is None or endFunds is None:
+            return -888888.8
 
         totStartValue = 0
         totEndValue = 0
@@ -274,7 +277,7 @@ class MetricHandler():
             return -88888.8
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def fetchFundsFromMongo(self, dayAsString):
 
@@ -291,7 +294,7 @@ class MetricHandler():
             return None
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def fetchDailyDataFromMongoByDate(self, dayAsString):
 
@@ -303,6 +306,8 @@ class MetricHandler():
 
         if len(retData) > 0:
             return retData, self.fetchFundsFromMongo(dayAsString)
+        else:
+            return None, None
 
     # ##############################################################################################################
     # ...
@@ -381,7 +386,7 @@ class MetricHandler():
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} calcTpIndexSince...")
 
         if date is None:
-            return -999889
+            return 0.0, -999889
 
         try:
             startStocks, startFunds = self.fetchDailyDataFromMongoByDate(date)
@@ -392,26 +397,26 @@ class MetricHandler():
             for stock in startStocks:
                 if 'priceInSekNow' not in stock or 'count' not in stock:
                     print(f"(a) warn. TpIndex, start stocks could not be looked up in todays value {stock}")
-                    continue
+                    return 0.0, -1
                 totStartStockValueTodaysCourse += stock['priceInSekNow'] * stock['count']
 
             totTodayStockValue = 0
             for stock in todayStocks:
                 if 'singleStockPriceSek' not in stock or 'count' not in stock:
                     print(f"(b) warn. Mal formatted entry from mongo {stock}")
-                    continue
+                    return 0.0, -1
                 totTodayStockValue += stock['singleStockPriceSek'] * stock['count']
 
             totTodayStockValue += todayFunds['fundsSek'] - todayFunds['putinSek'] - todayFunds['yield']
             totStartStockValueTodaysCourse += startFunds['fundsSek'] - startFunds['putinSek'] - startFunds['yield']
 
             if totStartStockValueTodaysCourse == 0:
-                return -99999.9
+                return 0.0, -99999.9
             else:
-                return ((totTodayStockValue / totStartStockValueTodaysCourse) - 1) * 100
+                return ((totTodayStockValue / totStartStockValueTodaysCourse) - 1) * 100, 0
         except Exception as ex:
             print(f"Exception in calcTpIndexSince {ex}")
-            return -77777
+            return 0.0, -77777
 
     # ##############################################################################################################
     # ...
@@ -533,9 +538,10 @@ class MetricHandler():
             self.writeDailyProgressToMongo(tickers)
 
             if datetime.datetime.now().hour != lastHour:
-                lastHour = datetime.datetime.now().hour
                 self.updateFundsToMongo(0)  # purchase of 0 sek has no impact in Db, but will copy records from yesterday to today
-                self.tpIndex = self.calcTpIndexSince(DAY_ZERO)
+                self.tpIndex, retCode = self.calcTpIndexSince(DAY_ZERO)
+                if retCode >= 0:
+                    lastHour = datetime.datetime.now().hour
 
             sys.stdout.flush()
             time.sleep(60)
