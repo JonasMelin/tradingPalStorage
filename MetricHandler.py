@@ -250,16 +250,9 @@ class MetricHandler():
 
         try:
             stocksAtStart, fundsAtStart = self.fetchDailyDataFromMongoByDate(startDate)
-            stocksToday, fundsToday = self.fetchDailyDataFromMongo(0, allowCrawlingBack=False)
-            stocksYesterday, fundsYesterday = self.fetchDailyDataFromMongo(1, allowCrawlingBack=True)
-            if (len(stocksToday) >= len(stocksYesterday)) and fundsToday is not None:
-                stocksNow = stocksToday
-                fundsNow = fundsToday
-            else:
-                stocksNow = stocksYesterday
-                fundsNow = fundsYesterday
+            stocksMostRecent, fundsMostResent = self.fetchDailyDataMostRecent()
 
-            return self.getFinancialDiffBetween(stocksAtStart, fundsAtStart, stocksNow, fundsNow, onlyCountActiveStocks=False)
+            return self.getFinancialDiffBetween(stocksAtStart, fundsAtStart, stocksMostRecent, fundsMostResent, onlyCountActiveStocks=False)
         except Exception as ex:
             return -88888.8
 
