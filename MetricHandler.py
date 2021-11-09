@@ -529,12 +529,12 @@ class MetricHandler():
             tickers = self.fetchTickers()
             self.writeTickersToMongo(tickers)
             self.writeDailyProgressToMongo(tickers)
+            if tickers is not None:
+                self.tpIndex, retCode = self.calcTpIndexSince(DAY_ZERO)
 
             if datetime.datetime.now().hour != lastHour:
+                lastHour = datetime.datetime.now().hour
                 self.updateFundsToMongo(0)  # purchase of 0 sek has no impact in Db, but will copy records from yesterday to today
-                self.tpIndex, retCode = self.calcTpIndexSince(DAY_ZERO)
-                if retCode >= 0:
-                    lastHour = datetime.datetime.now().hour
 
             sys.stdout.flush()
             time.sleep(60)
