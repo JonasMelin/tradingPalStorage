@@ -116,6 +116,7 @@ class MetricHandler():
             fundsSekFromMongo = 0
             putinSekFromMongo = 0
             yieldFromMongo = 0
+            yieldTaxFromMongo = 0
 
             if fromMongo is None:
                 print("Initializing funds collection in mongo...")
@@ -123,6 +124,7 @@ class MetricHandler():
                 fundsSekFromMongo = fromMongo['fundsSek']
                 putinSekFromMongo = fromMongo['putinSek']
                 yieldFromMongo = fromMongo['yield']
+                yieldTaxFromMongo = fromMongo['yieldTax']
 
             self.dbAccess.update_one(
                 {"day": self.getDayAsStringDaysBack(0)},
@@ -130,7 +132,8 @@ class MetricHandler():
                     {
                         "fundsSek": fundsSekFromMongo - purchaseValueSek,
                         "putinSek": putinSekFromMongo,
-                        "yield": yieldFromMongo
+                        "yield": yieldFromMongo,
+                        "yieldTaxFromMongo": yieldTaxFromMongo
                     }
                 },
                 DbAccess.Collection.Funds)
@@ -303,7 +306,7 @@ class MetricHandler():
             return None, None
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def fetchDailyDataMostRecent(self):
 
@@ -327,7 +330,7 @@ class MetricHandler():
         return list(retData.values()), latestFunds
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def fetchDailyDataFromMongo(self, daysback, allowCrawlingBack = True):
 
@@ -346,7 +349,7 @@ class MetricHandler():
         return [], None
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def addCurrentStockValueToStocks(self, stocks):
 
@@ -372,7 +375,7 @@ class MetricHandler():
             print(f"Error in addCurrentStockValueToStocks(): {ex}")
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def calcTpIndexSince(self, date):
 
@@ -400,8 +403,8 @@ class MetricHandler():
                     return 0.0, -1
                 totTodayStockValue += stock['singleStockPriceSek'] * stock['count']
 
-            totTodayStockValue += todayFunds['fundsSek'] - todayFunds['putinSek'] - todayFunds['yield']
-            totStartStockValueTodaysCourse += startFunds['fundsSek'] - startFunds['putinSek'] - startFunds['yield']
+            totTodayStockValue += todayFunds['fundsSek'] - todayFunds['putinSek'] - todayFunds['yield'] + todayFunds['yieldTax']
+            totStartStockValueTodaysCourse += startFunds['fundsSek'] - startFunds['putinSek'] - startFunds['yield'] + todayFunds['yieldTax']
 
             if totStartStockValueTodaysCourse == 0:
                 return 0.0, -99999.9
@@ -412,7 +415,7 @@ class MetricHandler():
             return 0.0, -77777
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def getTpIndexWithTrend(self):
 
@@ -426,7 +429,7 @@ class MetricHandler():
         return self.tpIndex, self.tpIndexTrend
 
     # ##############################################################################################################
-    # ...
+    # Tested
     # ##############################################################################################################
     def getDevelopmentWithTrend(self, daysback):
 
