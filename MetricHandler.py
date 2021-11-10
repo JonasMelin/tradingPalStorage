@@ -133,7 +133,7 @@ class MetricHandler():
                         "fundsSek": fundsSekFromMongo - purchaseValueSek,
                         "putinSek": putinSekFromMongo,
                         "yield": yieldFromMongo,
-                        "yieldTaxFromMongo": yieldTaxFromMongo
+                        "yieldTax": yieldTaxFromMongo
                     }
                 },
                 DbAccess.Collection.Funds)
