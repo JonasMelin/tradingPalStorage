@@ -117,14 +117,17 @@ class MetricHandler():
             putinSekFromMongo = 0
             yieldFromMongo = 0
             yieldTaxFromMongo = 0
+            tpIndex = self.tpIndex if self.tpIndex > -1000 else 0.0
 
             if fromMongo is None:
                 print("Initializing funds collection in mongo...")
             else:
-                fundsSekFromMongo = fromMongo['fundsSek']
-                putinSekFromMongo = fromMongo['putinSek']
-                yieldFromMongo = fromMongo['yield']
-                yieldTaxFromMongo = fromMongo['yieldTax']
+                fundsSekFromMongo = fromMongo['fundsSek'] if 'fundsSek' in fromMongo else 0
+                putinSekFromMongo = fromMongo['putinSek'] if 'putinSek' in fromMongo else 0
+                yieldFromMongo = fromMongo['yield'] if 'yield' in fromMongo else 0
+                yieldTaxFromMongo = fromMongo['yieldTax'] if 'yieldTax' in fromMongo else 0
+                if 'tpIndex' in fromMongo:
+                    tpIndex = self.tpIndex if self.tpIndex > -1000 else fromMongo['tpIndex']
 
             self.dbAccess.update_one(
                 {"day": self.getDayAsStringDaysBack(0)},
@@ -133,7 +136,8 @@ class MetricHandler():
                         "fundsSek": fundsSekFromMongo - purchaseValueSek,
                         "putinSek": putinSekFromMongo,
                         "yield": yieldFromMongo,
-                        "yieldTax": yieldTaxFromMongo
+                        "yieldTax": yieldTaxFromMongo,
+                        "tpIndex": tpIndex
                     }
                 },
                 DbAccess.Collection.Funds)
