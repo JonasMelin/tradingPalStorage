@@ -240,7 +240,10 @@ class MetricHandler():
                 startVal = startTickers[endTickerName]['count'] * startTickers[endTickerName]['singleStockPriceSek']
 
             totStartValue += startVal
-            totEndValue += endTicker['count'] * endTicker['singleStockPriceSek']
+            if 'priceInSekNow' in endTicker:
+                totEndValue += endTicker['count'] * endTicker['priceInSekNow']
+            else:
+                totEndValue += endTicker['count'] * endTicker['singleStockPriceSek']
 
         totStartValue += (startFunds['fundsSek'] if startFunds is not None else 0) - (startFunds['putinSek'] if startFunds is not None else 0)
         totEndValue += (endFunds['fundsSek'] if endFunds is not None else 0) - (endFunds['putinSek'] if endFunds is not None else 0)
@@ -258,6 +261,7 @@ class MetricHandler():
         try:
             stocksAtStart, fundsAtStart = self.fetchDailyDataFromMongoByDate(startDate)
             stocksMostRecent, fundsMostResent = self.fetchDailyDataMostRecent()
+            self.addCurrentStockValueToStocks(stocksMostRecent)
 
             return self.getFinancialDiffBetween(stocksAtStart, fundsAtStart, stocksMostRecent, fundsMostResent, onlyCountActiveStocks=False)
         except Exception as ex:
@@ -271,6 +275,7 @@ class MetricHandler():
         try:
             stocksDaysBack, fundsDaysBack = self.fetchDailyDataFromMongo(daysback)
             stocksToday, fundsToday = self.fetchDailyDataFromMongo(0)
+            self.addCurrentStockValueToStocks(stocksToday)
 
             return self.getFinancialDiffBetween(stocksDaysBack, fundsDaysBack, stocksToday, fundsToday )
         except Exception as ex:
