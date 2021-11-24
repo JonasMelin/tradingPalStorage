@@ -392,6 +392,7 @@ class MetricHandler():
             startStocks, startFunds = self.fetchDailyDataFromMongoByDate(date)
             todayStocks, todayFunds = self.fetchDailyDataMostRecent()
             self.addCurrentStockValueToStocks(startStocks)
+            self.addCurrentStockValueToStocks(todayStocks)
 
             totStartStockValueTodaysCourse = 0
             for stock in startStocks:
@@ -405,7 +406,7 @@ class MetricHandler():
                 if 'singleStockPriceSek' not in stock or 'count' not in stock:
                     print(f"(b) warn. Mal formatted entry from mongo {stock}")
                     return 0.0, -1
-                totTodayStockValue += stock['singleStockPriceSek'] * stock['count']
+                totTodayStockValue += stock['priceInSekNow'] * stock['count']
 
             totTodayStockValue += todayFunds['fundsSek'] - todayFunds['putinSek'] - todayFunds['yield'] + todayFunds['yieldTax']
             totStartStockValueTodaysCourse += startFunds['fundsSek'] - startFunds['putinSek'] - startFunds['yield'] + todayFunds['yieldTax']
