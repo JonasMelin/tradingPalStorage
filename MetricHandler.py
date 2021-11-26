@@ -273,11 +273,11 @@ class MetricHandler():
     def getHistoricDevelopment(self, daysback):
 
         try:
-            stocksDaysBack, fundsDaysBack = self.fetchDailyDataFromMongo(daysback)
+            stocksDaysBack, fundsDaysBack = self.fetchDailyDataFromMongo(daysback, allowCrawlingBack=True)
             stocksToday, fundsToday = self.fetchDailyDataFromMongo(0)
             self.addCurrentStockValueToStocks(stocksToday)
 
-            return self.getFinancialDiffBetween(stocksDaysBack, fundsDaysBack, stocksToday, fundsToday )
+            return self.getFinancialDiffBetween(stocksDaysBack, fundsDaysBack, stocksToday, fundsToday, onlyCountActiveStocks=False)
         except Exception as ex:
             return -88888.8
 
