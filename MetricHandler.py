@@ -4,6 +4,7 @@ DAY_ZERO = "2021-10-28"
 URLTickerCurrentValue = "http://192.168.1.50:5000/tradingpal/getTickerValue"
 URLTickers = "http://192.168.1.50:5000/tradingpal/getAllStocks"
 URLTransactions = "http://127.0.0.1:5000/tradingpal/getFirstChangeLogItem"
+URLFunds = "http://192.168.1.50:5002/tradingpalavanza/getfunds"
 
 class MetricHandler():
 
@@ -129,11 +130,19 @@ class MetricHandler():
                 if 'tpIndex' in fromMongo:
                     tpIndex = self.tpIndex if self.tpIndex > -1000 else fromMongo['tpIndex']
 
+            fundsFromAvanza = requests.get(URLFunds)
+
+            if fundsFromAvanza.status_code == 200 and fundsFromAvanza.content is not None:
+                fundsSek = int(json.loads(fundsFromAvanza.content)['funds'])
+            else:
+                print("Failed to fetch funds from tradingpalAvanza. Calculating manually...")
+                fundsSek = fundsSekFromMongo - purchaseValueSek
+
             self.dbAccess.update_one(
                 {"day": self.getDayAsStringDaysBack(0)},
                 {"$set":
                     {
-                        "fundsSek": fundsSekFromMongo - purchaseValueSek,
+                        "fundsSek": fundsSek,
                         "putinSek": putinSekFromMongo,
                         "yield": yieldFromMongo,
                         "yieldTax": yieldTaxFromMongo,

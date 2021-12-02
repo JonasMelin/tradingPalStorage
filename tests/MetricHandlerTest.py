@@ -7,6 +7,7 @@ getTickerCurrentValueReply = "{\n    \"price\": 25.76,\n    \"industry\": \"Oil 
 mongoFundsFindOne = {'_id': '618708fa9d2a3d6e68fa052d', 'day': '2021-11-07', 'fundsSek': 14334, 'putinSek': 1, 'yield': 577, 'yieldTax': 2, 'tpIndex': 0.04}
 mongoDailyProgressFindByDay = [{'_id': '617a4b21e9df121b71f9a3c8', 'day': '2021-10-28', 'ticker': 'AKSO.OL', 'count': 223, 'name': 'Aker solutions', 'singleStockPriceSek': 24.606665999999997, 'currency': 'NOK'}]
 mongoTransactionsFindByDay = [{'_id': '618ad061f76a6b5902fc9712', 'boughtAt': None, 'count': 52, 'currency': 'CAD', 'name': 'Boston Pizza', 'soldAt': 15.88, 'totalInvestedSek': 4548, 'purchasedStocks': -11, 'purchaseValueSek': -1202, 'date': datetime.datetime(2021, 11, 9, 19, 47, 14, 351000), 'tradedByBot': True}]
+getFundsFromAvanzaHandlerReply = "{\"funds\":5000.07}"
 
 @patch('MetricHandler.requests')
 def testFetchTickers(requestsMock):
@@ -59,10 +60,13 @@ def testWriteTransactions():
     objUnderTest.dbAccess.insert_one.assert_called_once_with(transactionData, DbAccess.Collection.Transactions)
     objUnderTest.updateFundsToMongo.assert_called_once_with(transactionData['purchaseValueSek'])
 
-def testUpdateFundsToMongo():
+@patch('MetricHandler.requests')
+def testUpdateFundsToMongo(requestsMock):
     objUnderTest = MetricHandler.MetricHandler()
     objUnderTest.dbAccess = MagicMock()
     objUnderTest.dbAccess.find_one.return_value = mongoFundsFindOne
+    requestsMock.get.return_value.status_code = 200
+    requestsMock.get.return_value.content = getFundsFromAvanzaHandlerReply
 
     objUnderTest.updateFundsToMongo(6)
 
