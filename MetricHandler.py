@@ -414,7 +414,7 @@ class MetricHandler():
                 totTodayStockValue += stock['priceInSekNow'] * stock['count']
 
             totTodayStockValue += todayFunds['fundsSek'] - todayFunds['putinSek'] - todayFunds['yield'] + todayFunds['yieldTax']
-            totStartStockValueTodaysCourse += startFunds['fundsSek'] - startFunds['putinSek'] - startFunds['yield'] + todayFunds['yieldTax']
+            totStartStockValueTodaysCourse += startFunds['fundsSek'] - startFunds['putinSek'] - startFunds['yield'] + startFunds['yieldTax']
 
             if totStartStockValueTodaysCourse == 0:
                 return 0.0, -99999.9
