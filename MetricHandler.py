@@ -129,9 +129,9 @@ class MetricHandler():
                 if 'tpIndex' in fromMongo:
                     tpIndex = self.tpIndex if self.tpIndex > -1000 else fromMongo['tpIndex']
 
-            fundsFromAvanza = requests.get(URLFunds)
             yieldFromMongo += self.getNewYieldFromAvanza()
             yieldTaxFromMongo += self.getNewTaxFromAvanza()
+            fundsFromAvanza = requests.get(URLFunds)
 
             if fundsFromAvanza.status_code == 200 and fundsFromAvanza.content is not None:
                 fundsSek = int(json.loads(fundsFromAvanza.content)['funds'])
@@ -180,7 +180,7 @@ class MetricHandler():
                 # Will throw upon duplicate key errors, i.e. each yield only counted once ever...
                 pass
 
-        return newYield
+        return int(newYield)
 
     # ##############################################################################################################
     # Tested
@@ -207,7 +207,7 @@ class MetricHandler():
                 # Will throw upon duplicate key errors, i.e. each tax only counted once ever...
                 pass
 
-        return -newTax
+        return -int(newTax)
 
 
     # ##############################################################################################################
