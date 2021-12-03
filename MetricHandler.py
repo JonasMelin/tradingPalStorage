@@ -584,8 +584,9 @@ class MetricHandler():
             sold = 0
             bought = 0
             for hit in hits:
-                bought += hit['purchaseValueSek'] if hit['purchaseValueSek'] > 0 else 0
-                sold += -hit['purchaseValueSek'] if hit['purchaseValueSek'] < 0 else 0
+                if hit['tradedByBot']:
+                    bought += hit['purchaseValueSek'] if hit['purchaseValueSek'] > 0 else 0
+                    sold += -hit['purchaseValueSek'] if hit['purchaseValueSek'] < 0 else 0
 
             return sold, bought
         except Exception as ex:
