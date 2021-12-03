@@ -8,12 +8,16 @@ collectionNameTickers = f"tickers"
 collectionNameDailyProgress = f"daily"
 collectionNameTransactions = f"transactions"
 collectionNameFunds = f"funds"
+collectionNameYield = f"yield"
+collectionNameTax = f"tax"
 
 class Collection(enum.Enum):
    Tickers = collectionNameTickers
    DailyProgress = collectionNameDailyProgress
    Transactions = collectionNameTransactions
    Funds = collectionNameFunds
+   Yields = collectionNameYield
+   Tax = collectionNameTax
 
 # ##############################################################################################################
 # ...
@@ -79,6 +83,9 @@ class DbAccess():
         self.DBWrite[Collection.DailyProgress.value].create_index([('day', ASCENDING), ('ticker', ASCENDING)], unique=True)
         self.DBWrite[Collection.Funds.value].create_index([('day', ASCENDING)], unique=True)
 
+        self.DBWrite[Collection.Yields.value].create_index([('id', ASCENDING)], unique=True)
+        self.DBWrite[Collection.Tax.value].create_index([('id', ASCENDING)], unique=True)
+
         self.DBWrite[Collection.Transactions.value].create_index([('date', ASCENDING)])
 
         self.DBWrite[Collection.Tickers.value].create_index([('tickerName', ASCENDING)])
@@ -110,6 +117,15 @@ class DbAccess():
     # ##############################################################################################################
     def find_one(self, query, collection: Collection):
         return self.DBRead[collection.value].find_one(query)
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def find_one_sort_by(self, sort: tuple, collection: Collection):
+        try:
+            return self.DBRead[collection.value].find().sort([sort]).next()
+        except Exception as ex:
+            return None
 
     # ##############################################################################################################
     # ...

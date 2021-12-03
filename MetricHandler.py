@@ -5,6 +5,8 @@ URLTickerCurrentValue = "http://192.168.1.50:5000/tradingpal/getTickerValue"
 URLTickers = "http://192.168.1.50:5000/tradingpal/getAllStocks"
 URLTransactions = "http://127.0.0.1:5000/tradingpal/getFirstChangeLogItem"
 URLFunds = "http://192.168.1.50:5002/tradingpalavanza/getfunds"
+URLTaxes = "http://192.168.1.50:5002/tradingpalavanza/gettax"
+URLYield = "http://192.168.1.50:5002/tradingpalavanza/getyield"
 
 class MetricHandler():
 
@@ -29,6 +31,7 @@ class MetricHandler():
     def init(self):
         self.dbAccess = DbAccess.DbAccess()
         self.dbAccess.init()
+        return self
 
     # ##############################################################################################################
     # Tested!
@@ -108,11 +111,7 @@ class MetricHandler():
             if purchaseValueSek != 0:
                 print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Updating funds to mongo {purchaseValueSek}")
 
-            fromMongo = None
-            for a in range(365):
-                fromMongo = self.dbAccess.find_one({"day": self.getDayAsStringDaysBack(a)}, DbAccess.Collection.Funds)
-                if fromMongo is not None:
-                    break
+            fromMongo = self.dbAccess.find_one_sort_by(("day", -1), DbAccess.Collection.Funds)
 
             fundsSekFromMongo = 0
             putinSekFromMongo = 0
@@ -131,6 +130,8 @@ class MetricHandler():
                     tpIndex = self.tpIndex if self.tpIndex > -1000 else fromMongo['tpIndex']
 
             fundsFromAvanza = requests.get(URLFunds)
+            yieldFromMongo += self.getNewYieldFromAvanza()
+            yieldTaxFromMongo += self.getNewTaxFromAvanza()
 
             if fundsFromAvanza.status_code == 200 and fundsFromAvanza.content is not None:
                 fundsSek = int(json.loads(fundsFromAvanza.content)['funds'])
@@ -153,6 +154,61 @@ class MetricHandler():
 
         except Exception as ex:
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to update funds in mongo. {ex}")
+
+    # ##############################################################################################################
+    # Tested
+    # ##############################################################################################################
+    def getNewYieldFromAvanza(self):
+        newYield = 0
+        rawYieldFromAvanza = requests.get(URLYield)
+
+        if rawYieldFromAvanza.status_code != 200 or rawYieldFromAvanza.content is None:
+            print("Problems getting yield from avanzaHAndler...")
+            return 0
+
+        jsonLoadedRawYield = json.loads(rawYieldFromAvanza.content)
+
+        if "yields" not in jsonLoadedRawYield or len(jsonLoadedRawYield['yields']) == 0:
+            return 0
+
+        for nextYield in jsonLoadedRawYield['yields']:
+
+            try:
+                self.dbAccess.insert_one(nextYield, DbAccess.Collection.Yields)
+                newYield += nextYield['amount']
+            except Exception:
+                # Will throw upon duplicate key errors, i.e. each yield only counted once ever...
+                pass
+
+        return newYield
+
+    # ##############################################################################################################
+    # Tested
+    # ##############################################################################################################
+    def getNewTaxFromAvanza(self):
+        newTax = 0
+        rawTaxFromAvanza = requests.get(URLTaxes)
+
+        if rawTaxFromAvanza.status_code != 200 or rawTaxFromAvanza.content is None:
+            print("Problems getting taxes from avanzaHAndler...")
+            return 0
+
+        jsonLoadedRawTax = json.loads(rawTaxFromAvanza.content)
+
+        if "taxes" not in jsonLoadedRawTax or len(jsonLoadedRawTax['taxes']) == 0:
+            return 0
+
+        for nextTax in jsonLoadedRawTax['taxes']:
+
+            try:
+                self.dbAccess.insert_one(nextTax, DbAccess.Collection.Tax)
+                newTax += nextTax['amount']
+            except Exception:
+                # Will throw upon duplicate key errors, i.e. each tax only counted once ever...
+                pass
+
+        return -newTax
+
 
     # ##############################################################################################################
     # Tested
@@ -560,3 +616,8 @@ class MetricHandler():
 
             sys.stdout.flush()
             time.sleep(60)
+
+if __name__ == "__main__":
+    m = MetricHandler().init()
+    m.getNewYieldFromAvanza()
+    m.getNewTaxFromAvanza()
