@@ -10,6 +10,7 @@ collectionNameTransactions = f"transactions"
 collectionNameFunds = f"funds"
 collectionNameYield = f"yield"
 collectionNameTax = f"tax"
+collectionNameNewStocks = f"newStocksQueue"
 
 class Collection(enum.Enum):
    Tickers = collectionNameTickers
@@ -18,6 +19,7 @@ class Collection(enum.Enum):
    Funds = collectionNameFunds
    Yields = collectionNameYield
    Tax = collectionNameTax
+   NewStocks = collectionNameNewStocks
 
 # ##############################################################################################################
 # ...
@@ -86,6 +88,8 @@ class DbAccess():
         self.DBWrite[Collection.Yields.value].create_index([('id', ASCENDING)], unique=True)
         self.DBWrite[Collection.Tax.value].create_index([('id', ASCENDING)], unique=True)
 
+        self.DBWrite[Collection.NewStocks.value].create_index([('prio', ASCENDING)])
+
         self.DBWrite[Collection.Transactions.value].create_index([('date', ASCENDING)])
 
         self.DBWrite[Collection.Tickers.value].create_index([('tickerName', ASCENDING)])
@@ -132,6 +136,12 @@ class DbAccess():
     # ##############################################################################################################
     def find(self, query, collection: Collection):
         return self.DBRead[collection.value].find(query)
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def delete_by_id(self, _id, collection: Collection):
+        self.DBWrite[collection.value].delete_one({"_id": _id})
 
 # ##############################################################################################################
 # ...

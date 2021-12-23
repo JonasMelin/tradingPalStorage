@@ -1,6 +1,9 @@
 from MetricHandler import MetricHandler
 from flask import Flask, request
 import threading
+import logging
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 
 app = Flask(__name__)
 metricHandler = MetricHandler()

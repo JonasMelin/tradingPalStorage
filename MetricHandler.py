@@ -7,6 +7,9 @@ URLTransactions = "http://127.0.0.1:5000/tradingpal/getFirstChangeLogItem"
 URLFunds = "http://192.168.1.50:5002/tradingpalavanza/getfunds"
 URLTaxes = "http://192.168.1.50:5002/tradingpalavanza/gettax"
 URLYield = "http://192.168.1.50:5002/tradingpalavanza/getyield"
+URLRegisterNewStock = "http://127.0.0.1:5000/tradingpal/registerNewStock"
+
+FUND_THRESH_INVEST_IN_NEW_STOCKS_SEK = 500
 
 class MetricHandler():
 
@@ -140,7 +143,7 @@ class MetricHandler():
                 fundsSek = fundsSekFromMongo - purchaseValueSek
 
             self.dbAccess.update_one(
-                {"day": self.getDayAsStringDaysBack(0)},
+                {"day": self.getDayAsStringDaysBackFromToday(0)},
                 {"$set":
                     {
                         "fundsSek": fundsSek,
@@ -154,6 +157,38 @@ class MetricHandler():
 
         except Exception as ex:
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to update funds in mongo. {ex}")
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def checkInvestNewStocks(self):
+
+        try:
+            fromMongo = self.dbAccess.find_one_sort_by(("day", -1), DbAccess.Collection.Funds)
+
+            if fromMongo is None or 'fundsSek' not in fromMongo or fromMongo['fundsSek'] < FUND_THRESH_INVEST_IN_NEW_STOCKS_SEK:
+                return
+
+            nextNewStock = self.dbAccess.find_one_sort_by(("prio", 1), DbAccess.Collection.NewStocks)
+
+            _id = nextNewStock['_id']
+            del(nextNewStock['_id'])
+
+            if nextNewStock is None or "ticker" not in nextNewStock:
+                print(f"Warning: No new stocks found to buy in collection {DbAccess.Collection.NewStocks}")
+                return
+
+            retData = requests.post(URLRegisterNewStock, json=nextNewStock)
+
+            if retData.status_code != 200:
+                print(f"Failed to register new stock: {nextNewStock}, {retData.content}")
+                return
+
+            self.dbAccess.delete_by_id(_id, DbAccess.Collection.NewStocks)
+        except Exception as ex:
+            print(f"Exception during checkInvestNewStocks: {ex}")
+
+
 
     # ##############################################################################################################
     # Tested
@@ -265,10 +300,21 @@ class MetricHandler():
     # ##############################################################################################################
     # Tested
     # ##############################################################################################################
-    def getDayAsStringDaysBack(self, daysback: int):
+    def getDayAsStringDaysBackFromToday(self, daysback: int):
+        return self.getDateAsStringDaysBack(datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm')), daysback)
 
-        day = datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm')) - datetime.timedelta(days=daysback)
-        return  f"{day.year}-{day.month:02}-{day.day:02}"
+    # ##############################################################################################################
+    # Tested
+    # ##############################################################################################################
+    def getDateAsStringDaysBack(self, date: datetime, daysback: int):
+        day = date - datetime.timedelta(days=daysback)
+        return f"{day.year}-{day.month:02}-{day.day:02}"
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def dayStringToDatetime(self, stringDate):
+        return datetime.datetime.strptime(stringDate, '%Y-%m-%d')
 
     # ##############################################################################################################
     # Tested
@@ -366,8 +412,10 @@ class MetricHandler():
     # ##############################################################################################################
     # Tested
     # ##############################################################################################################
-    def fetchDailyDataFromMongoByDate(self, dayAsString):
+    def fetchDailyDataFromMongoByDate(self, dayAsString, allowCrawlingBack = False):
 
+        # ToDo: Implement allowCrawlingBack
+        
         hits = self.dbAccess.find({"day": dayAsString}, DbAccess.Collection.DailyProgress)
         retData = []
 
@@ -378,6 +426,7 @@ class MetricHandler():
             return retData, self.fetchFundsFromMongo(dayAsString)
         else:
             return None, None
+
 
     # ##############################################################################################################
     # Tested
@@ -391,7 +440,7 @@ class MetricHandler():
 
         for a in range(MAX_DAYS_BACK):
             dayBackToCheck = MAX_DAYS_BACK - a - 1
-            dayAsString = self.getDayAsStringDaysBack(dayBackToCheck)
+            dayAsString = self.getDayAsStringDaysBackFromToday(dayBackToCheck)
             hits = self.dbAccess.find({"day": dayAsString}, DbAccess.Collection.DailyProgress)
 
 
@@ -410,7 +459,7 @@ class MetricHandler():
 
         for a in range(5 if allowCrawlingBack else 1):
             dayBackToCheck = daysback + a
-            dayAsString = self.getDayAsStringDaysBack(dayBackToCheck)
+            dayAsString = self.getDayAsStringDaysBackFromToday(dayBackToCheck)
             hits = self.dbAccess.find({"day": dayAsString}, DbAccess.Collection.DailyProgress)
             retData = []
 
@@ -453,7 +502,7 @@ class MetricHandler():
     # ##############################################################################################################
     def calcTpIndexSince(self, date):
 
-        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} calcTpIndexSince...")
+        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} calcTpIndexSince {date}")
 
         if date is None:
             return 0.0, -999889
@@ -608,6 +657,7 @@ class MetricHandler():
             tickers = self.fetchTickers()
             self.writeTickersToMongo(tickers)
             self.writeDailyProgressToMongo(tickers)
+            #self.checkInvestNewStocks()
             if tickers is not None:
                 self.tpIndex, retCode = self.calcTpIndexSince(DAY_ZERO)
 
@@ -620,5 +670,10 @@ class MetricHandler():
 
 if __name__ == "__main__":
     m = MetricHandler().init()
-    m.getNewYieldFromAvanza()
-    m.getNewTaxFromAvanza()
+    #m.getNewYieldFromAvanza()
+    #m.getNewTaxFromAvanza()
+    #m.checkInvestNewStocks()
+    date = m.dayStringToDatetime("2021-11-26")
+    date = m.getDayAsStringDaysBackFromToday(4)
+    retVal = m.calcTpIndexSince("2021-10-28")
+    print(retVal)
