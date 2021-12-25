@@ -12,7 +12,12 @@ metricHandler = MetricHandler()
 def getTpIndex():
 
     tpIndex, tpIndexTrend = metricHandler.getTpIndexWithTrend()
-    return {"retval": tpIndex, "trend": tpIndexTrend}
+    tpIndexByMonth = metricHandler.getTpIndexByMonth()
+
+    return {
+        "retval": tpIndex, "trend": tpIndexTrend, "descrRetval": "TP index calculated from DAY_ZERO until TODAY in one single calculation",
+        "tpIndexByMonth": tpIndexByMonth
+    }
 
 @app.route("/tradingpalstorage/getDevelopmentSinceStart", methods=['GET'])
 def getDevelopmentSinceStart():

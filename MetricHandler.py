@@ -17,6 +17,7 @@ class MetricHandler():
     # ...
     # ##############################################################################################################
     def __init__(self):
+        self.tpIndexByMonth = []
         self.tpIndex = -89999
         self.tpIndexTrend = 0
         self.tpIndexLast = 0
@@ -308,7 +309,13 @@ class MetricHandler():
     # ##############################################################################################################
     def getDateAsStringDaysBack(self, date: datetime, daysback: int):
         day = date - datetime.timedelta(days=daysback)
-        return f"{day.year}-{day.month:02}-{day.day:02}"
+        return self.getDateAsString(day)
+
+    # ##############################################################################################################
+    # 
+    # ##############################################################################################################
+    def getDateAsString(self, date: datetime):
+        return f"{date.year}-{date.month:02}-{date.day:02}"
 
     # ##############################################################################################################
     # ...
@@ -414,18 +421,21 @@ class MetricHandler():
     # ##############################################################################################################
     def fetchDailyDataFromMongoByDate(self, dayAsString, allowCrawlingBack = False):
 
-        # ToDo: Implement allowCrawlingBack
-        
-        hits = self.dbAccess.find({"day": dayAsString}, DbAccess.Collection.DailyProgress)
-        retData = []
+        self.getDateAsStringDaysBack(self.dayStringToDatetime(dayAsString), 1)
 
-        for hit in hits:
-            retData.append(hit)
+        for a in range(15 if allowCrawlingBack else 1):
+            nextDateToCheck = self.getDateAsStringDaysBack(self.dayStringToDatetime(dayAsString), a)
+            hits = self.dbAccess.find({"day": nextDateToCheck}, DbAccess.Collection.DailyProgress)
+            retData = []
 
-        if len(retData) > 0:
-            return retData, self.fetchFundsFromMongo(dayAsString)
-        else:
-            return None, None
+            for hit in hits:
+                retData.append(hit)
+
+            if len(retData) > 0:
+                return retData, self.fetchFundsFromMongo(dayAsString)
+
+        return None, None
+
 
 
     # ##############################################################################################################
@@ -500,16 +510,16 @@ class MetricHandler():
     # ##############################################################################################################
     # Tested
     # ##############################################################################################################
-    def calcTpIndexSince(self, date):
+    def calcTpIndexSince(self, startDate: str, endDate: str):
 
-        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} calcTpIndexSince {date}")
+        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} calcTpIndexFrom {startDate} to {endDate}")
 
-        if date is None:
+        if startDate is None or endDate is None:
             return 0.0, -999889
 
         try:
-            startStocks, startFunds = self.fetchDailyDataFromMongoByDate(date)
-            todayStocks, todayFunds = self.fetchDailyDataMostRecent()
+            startStocks, startFunds = self.fetchDailyDataFromMongoByDate(dayAsString=startDate, allowCrawlingBack=True)
+            todayStocks, todayFunds = self.fetchDailyDataFromMongoByDate(dayAsString=endDate, allowCrawlingBack=True)
             self.addCurrentStockValueToStocks(startStocks)
             self.addCurrentStockValueToStocks(todayStocks)
 
@@ -537,6 +547,12 @@ class MetricHandler():
         except Exception as ex:
             print(f"Exception in calcTpIndexSince {ex}")
             return 0.0, -77777
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def getTpIndexByMonth(self):
+        return self.tpIndexByMonth
 
     # ##############################################################################################################
     # Tested
@@ -645,6 +661,67 @@ class MetricHandler():
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
+    def getTpIndexesByMonth(self):
+        DAY_STEPPING = 30
+        today = self.dayStringToDatetime(self.getDateAsString(datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm'))))
+        startDate = self.dayStringToDatetime(DAY_ZERO)
+        endDate = self.dayStringToDatetime(DAY_ZERO) + datetime.timedelta(days=DAY_STEPPING)
+        monthlyResult = []
+        totDays = 0
+
+        while True:
+
+            if self.getDateAsString(endDate) > self.getDateAsString(today):
+                endDate = today
+
+            delta = (endDate - startDate).days
+
+            if delta < 1:
+                break
+
+            tpIndex = self.calcTpIndexSince(self.getDateAsString(startDate), self.getDateAsString(endDate))[0]
+            monthlyResult.append({"tpIMonth": tpIndex, "deltaDays": delta, "dayStepping": DAY_STEPPING, "startDate": startDate, "endDate": endDate})
+            totDays += delta
+
+            endDate = endDate + datetime.timedelta(days=DAY_STEPPING)
+            startDate = startDate + datetime.timedelta(days=DAY_STEPPING)
+
+        tpIndexSummed = self.sumUpMonthlyTpIndexes(monthlyResult)
+
+        return {
+            "monthlyResult": monthlyResult, "descrMonthlyResult": "Calculated tpIndexes for every month since DAY_ZERO",
+            "tpIndexSummed": tpIndexSummed,  "descrTpIndexSummed": "Summing up the total tpIndex from DAY_ZERO until TODAY, based on per month calculations",
+            "tpIndexByYear": self.getTpIndexByYearSinceStart(tpIndexSummed, totDays),  "descrTpIndexByYear": "Extrapolate the tpIndexSummed to a one year basis"
+        }
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def sumUpMonthlyTpIndexes(self, monthlyResult: list):
+
+        K = 100
+        index = K
+
+        for result in monthlyResult:
+            weightedIndex = result["tpIMonth"] * (result["deltaDays"] / result["dayStepping"])
+            index = index * ((weightedIndex / 100) + 1)
+
+        return index - K
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def getTpIndexByYearSinceStart(self, tpIndexSummed, totDays):
+
+        partOfMonth = totDays / (365 / 12)
+        interestPerMonth = tpIndexSummed / partOfMonth
+
+        n = 12
+        return (((1 + (interestPerMonth / 100)) ** n) - 1) * 100
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def mainLoop(self):
 
         lastHour = -1
@@ -659,9 +736,10 @@ class MetricHandler():
             self.writeDailyProgressToMongo(tickers)
             #self.checkInvestNewStocks()
             if tickers is not None:
-                self.tpIndex, retCode = self.calcTpIndexSince(DAY_ZERO)
+                self.tpIndex, retCode = self.calcTpIndexSince(DAY_ZERO, self.getDayAsStringDaysBackFromToday(0))
 
             if datetime.datetime.now().hour != lastHour:
+                self.tpIndexByMonth = self.getTpIndexesByMonth()
                 lastHour = datetime.datetime.now().hour
                 self.updateFundsToMongo(0)  # purchase of 0 sek has no impact in Db, but will copy records from yesterday to today
 
@@ -673,7 +751,13 @@ if __name__ == "__main__":
     #m.getNewYieldFromAvanza()
     #m.getNewTaxFromAvanza()
     #m.checkInvestNewStocks()
-    date = m.dayStringToDatetime("2021-11-26")
-    date = m.getDayAsStringDaysBackFromToday(4)
-    retVal = m.calcTpIndexSince("2021-10-28")
-    print(retVal)
+    tpindexes = m.getTpIndexesByMonth()
+    print(tpindexes)
+
+    exit(0)
+
+
+    retVal1 = m.calcTpIndexSince("2021-10-28", m.getDayAsStringDaysBackFromToday(0))
+    retVal2 = m.calcTpIndexSince("2021-11-28", m.getDayAsStringDaysBackFromToday(0))
+
+    print(f"{retVal1} {retVal2}")
