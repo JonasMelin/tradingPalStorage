@@ -299,6 +299,12 @@ class MetricHandler():
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Failed to insert tickers to mongo. {ex}")
 
     # ##############################################################################################################
+    #
+    # ##############################################################################################################
+    def getTodayAsString(self):
+        return self.getDateAsStringDaysBack(datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm')), 0)
+
+    # ##############################################################################################################
     # Tested
     # ##############################################################################################################
     def getDayAsStringDaysBackFromToday(self, daysback: int):
@@ -378,7 +384,7 @@ class MetricHandler():
 
         try:
             stocksAtStart, fundsAtStart = self.fetchDailyDataFromMongoByDate(startDate)
-            stocksMostRecent, fundsMostResent = self.fetchDailyDataMostRecent()
+            stocksMostRecent, fundsMostResent = self.fetchDailyDataMostRecent(self.getTodayAsString())
             self.addCurrentStockValueToStocks(stocksMostRecent)
 
             return self.getFinancialDiffBetween(stocksAtStart, fundsAtStart, stocksMostRecent, fundsMostResent, onlyCountActiveStocks=False)
@@ -421,8 +427,6 @@ class MetricHandler():
     # ##############################################################################################################
     def fetchDailyDataFromMongoByDate(self, dayAsString, allowCrawlingBack = False):
 
-        self.getDateAsStringDaysBack(self.dayStringToDatetime(dayAsString), 1)
-
         for a in range(15 if allowCrawlingBack else 1):
             nextDateToCheck = self.getDateAsStringDaysBack(self.dayStringToDatetime(dayAsString), a)
             hits = self.dbAccess.find({"day": nextDateToCheck}, DbAccess.Collection.DailyProgress)
@@ -441,7 +445,7 @@ class MetricHandler():
     # ##############################################################################################################
     # Tested
     # ##############################################################################################################
-    def fetchDailyDataMostRecent(self):
+    def fetchDailyDataMostRecent(self, dayAsString: str):
 
         MAX_DAYS_BACK = 5
 
@@ -450,7 +454,7 @@ class MetricHandler():
 
         for a in range(MAX_DAYS_BACK):
             dayBackToCheck = MAX_DAYS_BACK - a - 1
-            dayAsString = self.getDayAsStringDaysBackFromToday(dayBackToCheck)
+            dayAsString = self.getDateAsStringDaysBack(self.dayStringToDatetime(dayAsString), dayBackToCheck)
             hits = self.dbAccess.find({"day": dayAsString}, DbAccess.Collection.DailyProgress)
 
 
@@ -510,7 +514,7 @@ class MetricHandler():
     # ##############################################################################################################
     # Tested
     # ##############################################################################################################
-    def calcTpIndexSince(self, startDate: str, endDate: str):
+    def calcTpIndexSince(self, startDate: str, endDate: str, sampleSingleStartDate = True, sampleSingleEndDate = True):
 
         print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} calcTpIndexFrom {startDate} to {endDate}")
 
@@ -518,8 +522,16 @@ class MetricHandler():
             return 0.0, -999889
 
         try:
-            startStocks, startFunds = self.fetchDailyDataFromMongoByDate(dayAsString=startDate, allowCrawlingBack=True)
-            todayStocks, todayFunds = self.fetchDailyDataFromMongoByDate(dayAsString=endDate, allowCrawlingBack=True)
+            if sampleSingleStartDate:
+                startStocks, startFunds = self.fetchDailyDataFromMongoByDate(dayAsString=startDate, allowCrawlingBack=True)
+            else:
+                startStocks, startFunds = self.fetchDailyDataMostRecent(dayAsString=startDate)
+
+            if sampleSingleEndDate:
+                todayStocks, todayFunds = self.fetchDailyDataFromMongoByDate(dayAsString=endDate, allowCrawlingBack=True)
+            else:
+                todayStocks, todayFunds = self.fetchDailyDataMostRecent(dayAsString=endDate)
+
             self.addCurrentStockValueToStocks(startStocks)
             self.addCurrentStockValueToStocks(todayStocks)
 
@@ -736,7 +748,7 @@ class MetricHandler():
             self.writeDailyProgressToMongo(tickers)
             #self.checkInvestNewStocks()
             if tickers is not None:
-                self.tpIndex, retCode = self.calcTpIndexSince(DAY_ZERO, self.getDayAsStringDaysBackFromToday(0))
+                self.tpIndex, retCode = self.calcTpIndexSince(DAY_ZERO, self.getTodayAsString(), sampleSingleStartDate=True, sampleSingleEndDate=False)
 
             if datetime.datetime.now().hour != lastHour:
                 self.tpIndexByMonth = self.getTpIndexesByMonth()
@@ -748,9 +760,8 @@ class MetricHandler():
 
 if __name__ == "__main__":
     m = MetricHandler().init()
-    #m.getNewYieldFromAvanza()
-    #m.getNewTaxFromAvanza()
-    #m.checkInvestNewStocks()
+
+    tp = m.calcTpIndexSince("2021-10-28", m.getTodayAsString())
     tpindexes = m.getTpIndexesByMonth()
     print(tpindexes)
 
