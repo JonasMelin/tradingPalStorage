@@ -454,8 +454,8 @@ class MetricHandler():
 
         for a in range(MAX_DAYS_BACK):
             dayBackToCheck = MAX_DAYS_BACK - a - 1
-            dayAsString = self.getDateAsStringDaysBack(self.dayStringToDatetime(dayAsString), dayBackToCheck)
-            hits = self.dbAccess.find({"day": dayAsString}, DbAccess.Collection.DailyProgress)
+            dayToCheck = self.getDateAsStringDaysBack(self.dayStringToDatetime(dayAsString), dayBackToCheck)
+            hits = self.dbAccess.find({"day": dayToCheck}, DbAccess.Collection.DailyProgress)
 
 
             for hit in hits:
@@ -675,7 +675,9 @@ class MetricHandler():
     # ##############################################################################################################
     def getTpIndexesByMonth(self):
         DAY_STEPPING = 30
-        today = self.dayStringToDatetime(self.getDateAsString(datetime.datetime.now(tz=pytz.timezone('Europe/Stockholm'))))
+
+        sampleSingleEndDate = True
+        today = self.dayStringToDatetime(self.getTodayAsString())
         startDate = self.dayStringToDatetime(DAY_ZERO)
         endDate = self.dayStringToDatetime(DAY_ZERO) + datetime.timedelta(days=DAY_STEPPING)
         monthlyResult = []
@@ -683,15 +685,16 @@ class MetricHandler():
 
         while True:
 
-            if self.getDateAsString(endDate) > self.getDateAsString(today):
+            if self.getDateAsString(endDate) >= self.getDateAsString(today):
                 endDate = today
+                sampleSingleEndDate = False # Today, then sample stocks from last updated
 
             delta = (endDate - startDate).days
 
             if delta < 1:
                 break
 
-            tpIndex = self.calcTpIndexSince(self.getDateAsString(startDate), self.getDateAsString(endDate))[0]
+            tpIndex = self.calcTpIndexSince(self.getDateAsString(startDate), self.getDateAsString(endDate), sampleSingleStartDate=True, sampleSingleEndDate=sampleSingleEndDate)[0]
             monthlyResult.append({"tpIMonth": tpIndex, "deltaDays": delta, "dayStepping": DAY_STEPPING, "startDate": startDate, "endDate": endDate})
             totDays += delta
 
@@ -761,7 +764,7 @@ class MetricHandler():
 if __name__ == "__main__":
     m = MetricHandler().init()
 
-    tp = m.calcTpIndexSince("2021-10-28", m.getTodayAsString())
+    #tp = m.calcTpIndexSince("2021-10-28", m.getTodayAsString())
     tpindexes = m.getTpIndexesByMonth()
     print(tpindexes)
 
