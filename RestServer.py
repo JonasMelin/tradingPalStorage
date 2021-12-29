@@ -63,6 +63,7 @@ def getStatsLastDays():
 @app.route("/tradingpalstorage/getSwitchAndTransactionMetrics", methods=['GET'])
 def getSwitchAndTransactionMetrics():
 
+    # ToDo: Extend by getting data from mongo
     return {
         "retval": metricHandler.getSwitchAndTransactionMetrics()
     }

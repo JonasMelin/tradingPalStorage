@@ -17,12 +17,7 @@ class MetricHandler():
     # ...
     # ##############################################################################################################
     def __init__(self):
-        self.switchAndTransactionMetrics = {"correctSwitched": -1,
-                "incorrectSwitched": -1,
-                "correctLastTransaction": -1,
-                "incorrectLastTransaction": -1,
-                "ignored": -1}
-
+        self.switchAndTransactionMetrics = None
         self.tpIndexByMonth = []
         self.tpIndex = -89999
         self.tpIndexTrend = 0
@@ -128,6 +123,10 @@ class MetricHandler():
             yieldFromMongo = 0
             yieldTaxFromMongo = 0
             tpIndex = self.tpIndex if self.tpIndex > -1000 else 0.0
+            correctSwitched = 0
+            incorrectSwitched = 0
+            correctLastTransaction = 0
+            incorrectLastTransaction = 0
 
             if fromMongo is None:
                 print("Initializing funds collection in mongo...")
@@ -138,6 +137,20 @@ class MetricHandler():
                 yieldTaxFromMongo = fromMongo['yieldTax'] if 'yieldTax' in fromMongo else 0
                 if 'tpIndex' in fromMongo:
                     tpIndex = self.tpIndex if self.tpIndex > -1000 else fromMongo['tpIndex']
+                if "correctSwitched" in fromMongo:
+                    correctSwitched = fromMongo["correctSwitched"]
+                if "incorrectSwitched" in fromMongo:
+                    incorrectSwitched = fromMongo["incorrectSwitched"]
+                if "correctLastTransaction" in fromMongo:
+                    correctLastTransaction = fromMongo["correctLastTransaction"]
+                if "incorrectLastTransaction" in fromMongo:
+                    incorrectLastTransaction = fromMongo["incorrectLastTransaction"]
+
+            if self.switchAndTransactionMetrics is not None:
+                correctSwitched = self.switchAndTransactionMetrics["correctSwitched"]
+                incorrectSwitched = self.switchAndTransactionMetrics["incorrectSwitched"]
+                correctLastTransaction = self.switchAndTransactionMetrics["correctLastTransaction"]
+                incorrectLastTransaction = self.switchAndTransactionMetrics["incorrectLastTransaction"]
 
             yieldFromMongo += self.getNewYieldFromAvanza()
             yieldTaxFromMongo += self.getNewTaxFromAvanza()
@@ -157,7 +170,11 @@ class MetricHandler():
                         "putinSek": putinSekFromMongo,
                         "yield": yieldFromMongo,
                         "yieldTax": yieldTaxFromMongo,
-                        "tpIndex": tpIndex
+                        "tpIndex": tpIndex,
+                        "correctSwitched": correctSwitched,
+                        "incorrectSwitched": incorrectSwitched,
+                        "correctLastTransaction": correctLastTransaction,
+                        "incorrectLastTransaction": incorrectLastTransaction,
                     }
                 },
                 DbAccess.Collection.Funds)
@@ -760,9 +777,13 @@ class MetricHandler():
         if tickers is None:
             return None
 
-        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Calculating switchAndTransactionMetrcis")
-
         try:
+
+            if tickers["skippedCounter"] != 0:
+                self.switchAndTransactionMetrics = None
+                return None
+
+            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Calculating switchAndTransactionMetrcis")
 
             if tickers is None or 'list' not in tickers or len(tickers['list']) == 0:
                 return None
@@ -798,8 +819,7 @@ class MetricHandler():
             print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))}. Could not calculate tpProperSwitchedIndex: {ex}")
             return None
 
-        self.switchAndTransactionMetrics = \
-            {
+        self.switchAndTransactionMetrics = {
                 "correctSwitched": correctSwitched,
                 "incorrectSwitched": incorrectSwitched,
                 "correctLastTransaction": correctLastTransaction,
