@@ -60,6 +60,14 @@ def getStatsLastDays():
         }
     }
 
+@app.route("/tradingpalstorage/getSwitchAndTransactionMetrics", methods=['GET'])
+def getSwitchAndTransactionMetrics():
+
+    return {
+        "retval": metricHandler.getSwitchAndTransactionMetrics()
+    }
+
+
 if __name__ == "__main__":
 
     metricHandler.init()

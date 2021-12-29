@@ -17,6 +17,12 @@ class MetricHandler():
     # ...
     # ##############################################################################################################
     def __init__(self):
+        self.switchAndTransactionMetrics = {"correctSwitched": -1,
+                "incorrectSwitched": -1,
+                "correctLastTransaction": -1,
+                "incorrectLastTransaction": -1,
+                "ignored": -1}
+
         self.tpIndexByMonth = []
         self.tpIndex = -89999
         self.tpIndexTrend = 0
@@ -737,6 +743,74 @@ class MetricHandler():
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
+    def getSwitchAndTransactionMetrics(self):
+        return self.switchAndTransactionMetrics
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def calculateSwitchAndTransactionMetrics(self, tickers):
+
+        correctSwitched = 0
+        incorrectSwitched = 0
+        ignored = 0
+        correctLastTransaction = 0
+        incorrectLastTransaction = 0
+
+        if tickers is None:
+            return None
+
+        print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Calculating switchAndTransactionMetrcis")
+
+        try:
+
+            if tickers is None or 'list' not in tickers or len(tickers['list']) == 0:
+                return None
+
+            for ticker in tickers['list']:
+
+                if ticker['currentStock']['boughtAt'] is not None:
+                    # BoughtAt means we want it to rise
+                    if ticker['priceOrigCurrancy'] >= ticker['currentStock']['switchedAt']:
+                        correctSwitched += 1
+                    else:
+                        incorrectSwitched += 1
+
+                    if ticker['priceOrigCurrancy'] >= ticker['currentStock']['boughtAt']:
+                        correctLastTransaction += 1
+                    else:
+                        incorrectLastTransaction += 1
+                elif ticker['currentStock']['soldAt'] is not None:
+                    # soldAt means we want it to fall
+                    if ticker['priceOrigCurrancy'] <= ticker['currentStock']['switchedAt']:
+                        correctSwitched += 1
+                    else:
+                        incorrectSwitched += 1
+
+                    if ticker['priceOrigCurrancy'] <= ticker['currentStock']['soldAt']:
+                        correctLastTransaction += 1
+                    else:
+                        incorrectLastTransaction += 1
+                else:
+                    ignored += 1
+
+        except Exception as ex:
+            print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))}. Could not calculate tpProperSwitchedIndex: {ex}")
+            return None
+
+        self.switchAndTransactionMetrics = \
+            {
+                "correctSwitched": correctSwitched,
+                "incorrectSwitched": incorrectSwitched,
+                "correctLastTransaction": correctLastTransaction,
+                "incorrectLastTransaction": incorrectLastTransaction,
+                "ignored": ignored
+            }
+
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def mainLoop(self):
 
         lastHour = -1
@@ -749,6 +823,7 @@ class MetricHandler():
             tickers = self.fetchTickers()
             self.writeTickersToMongo(tickers)
             self.writeDailyProgressToMongo(tickers)
+            self.calculateSwitchAndTransactionMetrics(tickers)
             #self.checkInvestNewStocks()
             if tickers is not None:
                 self.tpIndex, retCode = self.calcTpIndexSince(DAY_ZERO, self.getTodayAsString(), sampleSingleStartDate=True, sampleSingleEndDate=False)
@@ -764,6 +839,9 @@ class MetricHandler():
 if __name__ == "__main__":
     m = MetricHandler().init()
 
+    retval = m.calculateSwitchAndTransactionMetrics(m.fetchTickers())
+    print(retval)
+    exit(0)
     #tp = m.calcTpIndexSince("2021-10-28", m.getTodayAsString())
     tpindexes = m.getTpIndexesByMonth()
     print(tpindexes)
