@@ -732,17 +732,20 @@ class MetricHandler():
     # ##############################################################################################################
     def monthlyAvgTpIndex(self, monthlyResult: list):
 
-        sumIndexPerDay = 0.0
+        sumIndexPerMonth = 0.0
         sumDays = 0
 
         for result in monthlyResult:
-            sumIndexPerDay += result["tpIMonth"] / (result["deltaDays"])
+            indexPerMonth = result["tpIMonth"] / (result["deltaDays"] / DAYS_PER_MONTH)
+            weightedIndexPerMonth = indexPerMonth * result["deltaDays"]
+
+            sumIndexPerMonth += weightedIndexPerMonth
             sumDays += result["deltaDays"]
 
         if sumDays < 1:
             return 0
 
-        return (sumIndexPerDay / sumDays) * DAYS_PER_MONTH * 100
+        return sumIndexPerMonth / sumDays
 
     # ##############################################################################################################
     # ...
@@ -752,6 +755,43 @@ class MetricHandler():
         n = 12
         return (((1 + (monthlyAvgTpIndex / 100)) ** n) - 1) * 100
 
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def getDailyMetrics(self):
+
+        retData = {
+            "tpIndex": [],
+            "correctSwitched": [],
+            "incorrectSwitched": [],
+            "correctLastTransaction": [],
+            "incorrectLastTransaction": [],
+        }
+
+        fromMongo = self.dbAccess.find_sort_by(("day", 1), DbAccess.Collection.Funds)
+
+        if fromMongo is None:
+            return retData
+
+        for element in fromMongo:
+
+            if "tpIndex" not in element:
+                continue
+
+            retData["tpIndex"].append(element["tpIndex"])
+
+            if "correctSwitched" in element and "incorrectSwitched" in element and "correctLastTransaction" in element and "incorrectLastTransaction":
+                retData["correctSwitched"].append(element["correctSwitched"])
+                retData["incorrectSwitched"].append(element["incorrectSwitched"])
+                retData["correctLastTransaction"].append(element["correctLastTransaction"])
+                retData["incorrectLastTransaction"].append(element["incorrectLastTransaction"])
+            else:
+                retData["correctSwitched"].append(0)
+                retData["incorrectSwitched"].append(0)
+                retData["correctLastTransaction"].append(0)
+                retData["incorrectLastTransaction"].append(0)
+
+        return retData
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
@@ -853,6 +893,8 @@ class MetricHandler():
 
 if __name__ == "__main__":
     m = MetricHandler().init()
+    ret = m.getDailyMetrics()
+    print(ret)
 
     #retval = m.calculateSwitchAndTransactionMetrics(m.fetchTickers())
     #print(retval)
