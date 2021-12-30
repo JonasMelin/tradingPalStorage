@@ -11,6 +11,8 @@ URLRegisterNewStock = "http://127.0.0.1:5000/tradingpal/registerNewStock"
 
 FUND_THRESH_INVEST_IN_NEW_STOCKS_SEK = 500
 
+DAYS_PER_MONTH = 30.41
+
 class MetricHandler():
 
     # ##############################################################################################################
@@ -699,63 +701,56 @@ class MetricHandler():
     def getTpIndexesByMonth(self):
         DAY_STEPPING = 30
 
-        sampleSingleEndDate = True
         today = self.dayStringToDatetime(self.getTodayAsString())
         startDate = self.dayStringToDatetime(DAY_ZERO)
-        endDate = self.dayStringToDatetime(DAY_ZERO) + datetime.timedelta(days=DAY_STEPPING)
         monthlyResult = []
         totDays = 0
 
         while True:
 
-            if self.getDateAsString(endDate) >= self.getDateAsString(today):
-                endDate = today
-                sampleSingleEndDate = False # Today, then sample stocks from last updated
-
-            delta = (endDate - startDate).days
-
-            if delta < 1:
+            if self.getDateAsString(startDate) >= self.getDateAsString(today):
                 break
 
-            tpIndex = self.calcTpIndexSince(self.getDateAsString(startDate), self.getDateAsString(endDate), sampleSingleStartDate=True, sampleSingleEndDate=sampleSingleEndDate)[0]
-            monthlyResult.append({"tpIMonth": tpIndex, "deltaDays": delta, "dayStepping": DAY_STEPPING, "startDate": startDate, "endDate": endDate})
+            delta = (today - startDate).days
+
+            tpIndex = self.calcTpIndexSince(self.getDateAsString(startDate), self.getDateAsString(today), sampleSingleStartDate=True, sampleSingleEndDate=False)[0]
+            monthlyResult.append({"tpIMonth": tpIndex, "deltaDays": delta, "dayStepping": DAY_STEPPING, "startDate": startDate, "endDate": today})
             totDays += delta
 
-            endDate = endDate + datetime.timedelta(days=DAY_STEPPING)
             startDate = startDate + datetime.timedelta(days=DAY_STEPPING)
 
-        tpIndexSummed = self.sumUpMonthlyTpIndexes(monthlyResult)
+        monthlyAvgTpIndex = self.monthlyAvgTpIndex(monthlyResult)
 
         return {
-            "monthlyResult": monthlyResult, "descrMonthlyResult": "Calculated tpIndexes for every month since DAY_ZERO",
-            "tpIndexSummed": tpIndexSummed,  "descrTpIndexSummed": "Summing up the total tpIndex from DAY_ZERO until TODAY, based on per month calculations",
-            "tpIndexByYear": self.getTpIndexByYearSinceStart(tpIndexSummed, totDays),  "descrTpIndexByYear": "Extrapolate the tpIndexSummed to a one year basis"
+            "monthlyResult": monthlyResult, "descrMonthlyResult": "Calculated tpIndexes since every month since DAY_ZERO",
+            "tpIndexSummed": monthlyAvgTpIndex,  "descrTpIndexSummed": "Averaging up the total tpIndex for all months, based on per month calculations",
+            "tpIndexByYear": self.getTpIndexByYearSinceStart(monthlyAvgTpIndex),  "descrTpIndexByYear": "Extrapolate the tpIndexSummed to a one year basis"
         }
 
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
-    def sumUpMonthlyTpIndexes(self, monthlyResult: list):
+    def monthlyAvgTpIndex(self, monthlyResult: list):
 
-        K = 100
-        index = K
+        sumIndexPerDay = 0.0
+        sumDays = 0
 
         for result in monthlyResult:
-            weightedIndex = result["tpIMonth"] * (result["deltaDays"] / result["dayStepping"])
-            index = index * ((weightedIndex / 100) + 1)
+            sumIndexPerDay += result["tpIMonth"] / (result["deltaDays"])
+            sumDays += result["deltaDays"]
 
-        return index - K
+        if sumDays < 1:
+            return 0
+
+        return (sumIndexPerDay / sumDays) * DAYS_PER_MONTH * 100
 
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
-    def getTpIndexByYearSinceStart(self, tpIndexSummed, totDays):
-
-        partOfMonth = totDays / (365 / 12)
-        interestPerMonth = tpIndexSummed / partOfMonth
+    def getTpIndexByYearSinceStart(self, monthlyAvgTpIndex):
 
         n = 12
-        return (((1 + (interestPerMonth / 100)) ** n) - 1) * 100
+        return (((1 + (monthlyAvgTpIndex / 100)) ** n) - 1) * 100
 
     # ##############################################################################################################
     # ...
@@ -859,9 +854,9 @@ class MetricHandler():
 if __name__ == "__main__":
     m = MetricHandler().init()
 
-    retval = m.calculateSwitchAndTransactionMetrics(m.fetchTickers())
-    print(retval)
-    exit(0)
+    #retval = m.calculateSwitchAndTransactionMetrics(m.fetchTickers())
+    #print(retval)
+    #exit(0)
     #tp = m.calcTpIndexSince("2021-10-28", m.getTodayAsString())
     tpindexes = m.getTpIndexesByMonth()
     print(tpindexes)
