@@ -719,6 +719,7 @@ class MetricHandler():
 
             startDate = startDate + datetime.timedelta(days=DAY_STEPPING)
 
+        monthlyResult.reverse()
         monthlyAvgTpIndex = self.monthlyAvgTpIndex(monthlyResult)
 
         return {
@@ -763,9 +764,8 @@ class MetricHandler():
         retData = {
             "tpIndex": [],
             "correctSwitched": [],
-            "incorrectSwitched": [],
             "correctLastTransaction": [],
-            "incorrectLastTransaction": [],
+            "startDate": None
         }
 
         fromMongo = self.dbAccess.find_sort_by(("day", 1), DbAccess.Collection.Funds)
@@ -778,18 +778,24 @@ class MetricHandler():
             if "tpIndex" not in element:
                 continue
 
+            if retData["startDate"] is None:
+                retData["startDate"] = element['day']
+
             retData["tpIndex"].append(element["tpIndex"])
 
             if "correctSwitched" in element and "incorrectSwitched" in element and "correctLastTransaction" in element and "incorrectLastTransaction":
-                retData["correctSwitched"].append(element["correctSwitched"])
-                retData["incorrectSwitched"].append(element["incorrectSwitched"])
-                retData["correctLastTransaction"].append(element["correctLastTransaction"])
-                retData["incorrectLastTransaction"].append(element["incorrectLastTransaction"])
+                if element["correctSwitched"] + element["incorrectSwitched"] > 0:
+                    retData["correctSwitched"].append(100 * element["correctSwitched"] / (element["correctSwitched"] + element["incorrectSwitched"]))
+                else:
+                    retData["correctSwitched"].append(0.0)
+
+                if element["correctLastTransaction"] + element["incorrectLastTransaction"] > 0:
+                    retData["correctLastTransaction"].append(100 * element["correctLastTransaction"]  / (element["correctLastTransaction"] + element["incorrectLastTransaction"]))
+                else:
+                    retData["correctLastTransaction"].append(0.0)
             else:
-                retData["correctSwitched"].append(0)
-                retData["incorrectSwitched"].append(0)
-                retData["correctLastTransaction"].append(0)
-                retData["incorrectLastTransaction"].append(0)
+                retData["correctSwitched"].append(0.0)
+                retData["correctLastTransaction"].append(0.0)
 
         return retData
     # ##############################################################################################################
