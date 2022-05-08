@@ -1,4 +1,4 @@
-import time, requests, json, datetime, sys, pytz, copy, DbAccess
+import collections, time, requests, json, datetime, sys, pytz, copy, DbAccess
 
 DAY_ZERO = "2021-10-28"
 URLTickerCurrentValue = "http://192.168.1.50:5000/tradingpal/getTickerValue"
@@ -472,7 +472,7 @@ class MetricHandler():
     # ##############################################################################################################
     def fetchDailyDataMostRecent(self, dayAsString: str):
 
-        MAX_DAYS_BACK = 5
+        MAX_DAYS_BACK = 10
 
         retData = {}
         latestFunds = None
@@ -868,6 +868,90 @@ class MetricHandler():
                 "ignored": ignored
             }
 
+    def calcSuperScore2(self):
+
+        COURTAGE = 5
+
+        finalResult = {}
+        totGain = 0
+        allTransactions = self.getAllTransactionsSorted()
+
+        for ticker, transactions in allTransactions.items():
+            name = None
+            startWorth = None
+            finalCountNoTrade = None
+            finalCountTrade = None
+            additionalInvestedTrading = 0
+            for date, transaction in transactions.items():
+                if startWorth is None:
+                    singleStockPriceSekStart = self.getTickerValueAtDateByName(transaction["name"], date)
+                    if singleStockPriceSekStart is None:
+                        #print(f"Warning: Could not fetch singleStockPriceSek {transaction['name']} - {date}")
+                        continue
+
+                    name = transaction["name"]
+
+
+                    startWorth = singleStockPriceSekStart * transaction['count']
+                    finalCountNoTrade = transaction['count']
+                    finalCountTrade = transaction['count']
+                else:
+                    additionalInvestedTrading += transaction['purchaseValueSek']
+                    finalCountTrade = transaction['count']
+                    additionalInvestedTrading += COURTAGE
+
+            lastTickerValueSek = self.getLastTickerValueSekByName(name)
+            finalWorthNoTrade = lastTickerValueSek * finalCountNoTrade
+            finalWorthTrade = lastTickerValueSek * finalCountTrade
+            finalAbsoluteGainNoTrade = finalWorthNoTrade - startWorth
+            finalAbsoluteGainTrade = finalWorthTrade - (additionalInvestedTrading + startWorth)
+            GAIN_TRADE = finalAbsoluteGainTrade - finalAbsoluteGainNoTrade
+            totGain += GAIN_TRADE
+            finalResult[name] = GAIN_TRADE
+
+        print(f"TOT_GAIN: {totGain:.1f} SEK")
+        finalResult = {k: v for k, v in sorted(finalResult.items(), key=lambda item: item[1], reverse=True)}
+        for k, v in finalResult.items():
+            print(f"{v:7.1f}  ({k})")
+        return finalResult
+
+    def getLastTickerValueSekByName(self, tickerName):
+        data = self.dbAccess.query_one_sort_by({"name": tickerName}, ("day", -1), DbAccess.Collection.DailyProgress)
+        if data is None or 'singleStockPriceSek' not in data:
+            return None
+
+        return data['singleStockPriceSek']
+
+    def getTickerValueAtDateByName(self, tickerName, date: datetime):
+
+        data = self.dbAccess.find_one({"day": self.getDateAsString(date), "name": tickerName}, DbAccess.Collection.DailyProgress)
+        if data is None or 'singleStockPriceSek' not in data:
+            return None
+
+        return data['singleStockPriceSek']
+
+
+
+
+    def getAllTransactionsSorted(self):
+        rawFromMongo = self.dbAccess.find_sort_by(("name", 1), DbAccess.Collection.Transactions)
+        retData = {}
+
+        for nextEntry in rawFromMongo:
+            name = nextEntry["name"]
+            if name not in retData:
+                retData[name] = {}
+
+            retData[name][nextEntry["date"]] = nextEntry
+
+        sortedRetData = {}
+
+        for ticker, transactions in retData.items():
+            s = dict(collections.OrderedDict(sorted(transactions.items(), reverse=False)))
+            if len(s) >= 3:
+                sortedRetData[ticker] = s
+
+        return sortedRetData
 
     # ##############################################################################################################
     # ...
@@ -899,8 +983,11 @@ class MetricHandler():
 
 if __name__ == "__main__":
     m = MetricHandler().init()
-    ret = m.getDailyMetrics()
-    print(ret)
+    m.calcSuperScore2()
+
+    #ret = m.getDailyMetrics()
+    #print(ret)
+    exit(0)
 
     #retval = m.calculateSwitchAndTransactionMetrics(m.fetchTickers())
     #print(retval)

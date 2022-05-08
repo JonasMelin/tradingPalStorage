@@ -134,6 +134,15 @@ class DbAccess():
     # ##############################################################################################################
     # ...
     # ##############################################################################################################
+    def query_one_sort_by(self, query, sort: tuple, collection: Collection):
+        try:
+            return self.DBRead[collection.value].find(query).sort([sort]).next()
+        except Exception as ex:
+            return None
+
+    # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
     def find_sort_by(self, sort: tuple, collection: Collection):
         try:
             return self.DBRead[collection.value].find().sort([sort])
