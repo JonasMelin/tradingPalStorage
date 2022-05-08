@@ -19,6 +19,7 @@ class MetricHandler():
     # ...
     # ##############################################################################################################
     def __init__(self):
+        self.superScore2List = {}
         self.switchAndTransactionMetrics = None
         self.tpIndexByMonth = []
         self.tpIndex = -89999
@@ -606,6 +607,12 @@ class MetricHandler():
         return self.tpIndex, self.tpIndexTrend
 
     # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def getSuperScore2(self):
+        return self.superScore2List
+
+    # ##############################################################################################################
     # Tested
     # ##############################################################################################################
     def getDevelopmentWithTrend(self, daysback):
@@ -870,50 +877,57 @@ class MetricHandler():
 
     def calcSuperScore2(self):
 
-        COURTAGE = 5
-
         finalResult = {}
-        totGain = 0
-        allTransactions = self.getAllTransactionsSorted()
+        print("Calulating superscore 2...")
 
-        for ticker, transactions in allTransactions.items():
-            name = None
-            startWorth = None
-            finalCountNoTrade = None
-            finalCountTrade = None
-            additionalInvestedTrading = 0
-            for date, transaction in transactions.items():
-                if startWorth is None:
-                    singleStockPriceSekStart = self.getTickerValueAtDateByName(transaction["name"], date)
-                    if singleStockPriceSekStart is None:
-                        #print(f"Warning: Could not fetch singleStockPriceSek {transaction['name']} - {date}")
-                        continue
+        try:
+            COURTAGE = 5
 
-                    name = transaction["name"]
+            totGain = 0
+            allTransactions = self.getAllTransactionsSorted()
+
+            for ticker, transactions in allTransactions.items():
+                name = None
+                startWorth = None
+                finalCountNoTrade = None
+                finalCountTrade = None
+                additionalInvestedTrading = 0
+                for date, transaction in transactions.items():
+                    if startWorth is None:
+                        singleStockPriceSekStart = self.getTickerValueAtDateByName(transaction["name"], date)
+                        if singleStockPriceSekStart is None:
+                            #print(f"Warning: Could not fetch singleStockPriceSek {transaction['name']} - {date}")
+                            continue
+
+                        name = transaction["name"]
 
 
-                    startWorth = singleStockPriceSekStart * transaction['count']
-                    finalCountNoTrade = transaction['count']
-                    finalCountTrade = transaction['count']
-                else:
-                    additionalInvestedTrading += transaction['purchaseValueSek']
-                    finalCountTrade = transaction['count']
-                    additionalInvestedTrading += COURTAGE
+                        startWorth = singleStockPriceSekStart * transaction['count']
+                        finalCountNoTrade = transaction['count']
+                        finalCountTrade = transaction['count']
+                    else:
+                        additionalInvestedTrading += transaction['purchaseValueSek']
+                        finalCountTrade = transaction['count']
+                        additionalInvestedTrading += COURTAGE
 
-            lastTickerValueSek = self.getLastTickerValueSekByName(name)
-            finalWorthNoTrade = lastTickerValueSek * finalCountNoTrade
-            finalWorthTrade = lastTickerValueSek * finalCountTrade
-            finalAbsoluteGainNoTrade = finalWorthNoTrade - startWorth
-            finalAbsoluteGainTrade = finalWorthTrade - (additionalInvestedTrading + startWorth)
-            GAIN_TRADE = finalAbsoluteGainTrade - finalAbsoluteGainNoTrade
-            totGain += GAIN_TRADE
-            finalResult[name] = GAIN_TRADE
+                lastTickerValueSek = self.getLastTickerValueSekByName(name)
+                finalWorthNoTrade = lastTickerValueSek * finalCountNoTrade
+                finalWorthTrade = lastTickerValueSek * finalCountTrade
+                finalAbsoluteGainNoTrade = finalWorthNoTrade - startWorth
+                finalAbsoluteGainTrade = finalWorthTrade - (additionalInvestedTrading + startWorth)
+                GAIN_TRADE = finalAbsoluteGainTrade - finalAbsoluteGainNoTrade
+                totGain += GAIN_TRADE
+                finalResult[name] = GAIN_TRADE
 
-        print(f"TOT_GAIN: {totGain:.1f} SEK")
-        finalResult = {k: v for k, v in sorted(finalResult.items(), key=lambda item: item[1], reverse=True)}
-        for k, v in finalResult.items():
-            print(f"{v:7.1f}  ({k})")
-        return finalResult
+            print(f"TOT_GAIN: {totGain:.1f} SEK")
+            finalResult = {k: v for k, v in sorted(finalResult.items(), key=lambda item: item[1], reverse=True)}
+            finalResultSorted = []
+            for k, v in finalResult.items():
+                finalResultSorted.append((k, v))
+            return finalResultSorted
+        except Exception as ex:
+            print(f"Error while calculating superscore2: {ex}")
+            return finalResult
 
     def getLastTickerValueSekByName(self, tickerName):
         data = self.dbAccess.query_one_sort_by({"name": tickerName}, ("day", -1), DbAccess.Collection.DailyProgress)
@@ -974,6 +988,7 @@ class MetricHandler():
                 self.tpIndex, retCode = self.calcTpIndexSince(DAY_ZERO, self.getTodayAsString(), sampleSingleStartDate=True, sampleSingleEndDate=False)
 
             if datetime.datetime.now().hour != lastHour:
+                self.superScore2List = self.calcSuperScore2()
                 self.tpIndexByMonth = self.getTpIndexesByMonth()
                 lastHour = datetime.datetime.now().hour
                 self.updateFundsToMongo(0)  # purchase of 0 sek has no impact in Db, but will copy records from yesterday to today

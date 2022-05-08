@@ -19,6 +19,13 @@ def getTpIndex():
         "tpIndexByMonth": tpIndexByMonth
     }
 
+@app.route("/tradingpalstorage/getSuperscore2", methods=['GET'])
+def getSuperscore2():
+
+    return {
+        "retval": metricHandler.getSuperScore2()
+    }
+
 @app.route("/tradingpalstorage/getDevelopmentSinceStart", methods=['GET'])
 def getDevelopmentSinceStart():
 
