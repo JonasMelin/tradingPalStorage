@@ -925,7 +925,7 @@ class MetricHandler():
             finalResultSorted = []
             for k, v in finalResult.items():
                 finalResultSorted.append((k, v))
-            return finalResultSorted
+            return finalResultSorted, totGain
         except Exception as ex:
             print(f"Error while calculating superscore2: {ex}")
             return finalResult, totGain
