@@ -20,6 +20,7 @@ class MetricHandler():
     # ##############################################################################################################
     def __init__(self):
         self.superScore2List = {}
+        self.superScore2Gain = -89999
         self.switchAndTransactionMetrics = None
         self.tpIndexByMonth = []
         self.tpIndex = -89999
@@ -610,7 +611,7 @@ class MetricHandler():
     # ...
     # ##############################################################################################################
     def getSuperScore2(self):
-        return self.superScore2List
+        return self.superScore2List, self.superScore2Gain
 
     # ##############################################################################################################
     # Tested
@@ -878,12 +879,12 @@ class MetricHandler():
     def calcSuperScore2(self):
 
         finalResult = {}
+        totGain = 0
+        COURTAGE = 5
+
         print("Calulating superscore 2...")
 
         try:
-            COURTAGE = 5
-
-            totGain = 0
             allTransactions = self.getAllTransactionsSorted()
 
             for ticker, transactions in allTransactions.items():
@@ -927,7 +928,7 @@ class MetricHandler():
             return finalResultSorted
         except Exception as ex:
             print(f"Error while calculating superscore2: {ex}")
-            return finalResult
+            return finalResult, totGain
 
     def getLastTickerValueSekByName(self, tickerName):
         data = self.dbAccess.query_one_sort_by({"name": tickerName}, ("day", -1), DbAccess.Collection.DailyProgress)
@@ -988,7 +989,7 @@ class MetricHandler():
                 self.tpIndex, retCode = self.calcTpIndexSince(DAY_ZERO, self.getTodayAsString(), sampleSingleStartDate=True, sampleSingleEndDate=False)
 
             if datetime.datetime.now().hour != lastHour:
-                self.superScore2List = self.calcSuperScore2()
+                self.superScore2List, self.superScore2Gain = self.calcSuperScore2()
                 self.tpIndexByMonth = self.getTpIndexesByMonth()
                 lastHour = datetime.datetime.now().hour
                 self.updateFundsToMongo(0)  # purchase of 0 sek has no impact in Db, but will copy records from yesterday to today

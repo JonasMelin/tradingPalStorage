@@ -22,8 +22,11 @@ def getTpIndex():
 @app.route("/tradingpalstorage/getSuperscore2", methods=['GET'])
 def getSuperscore2():
 
+    gainList, gainValue = metricHandler.getSuperScore2()
+
     return {
-        "retval": metricHandler.getSuperScore2()
+        "retval": gainList,
+        "gainValue": gainValue,
     }
 
 @app.route("/tradingpalstorage/getDevelopmentSinceStart", methods=['GET'])
