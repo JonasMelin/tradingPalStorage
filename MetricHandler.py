@@ -1,4 +1,4 @@
-import collections, time, requests, json, datetime, sys, pytz, copy, DbAccess
+import collections, time, requests, json, datetime, sys, pytz, copy, DbAccess, tables, math
 
 DAY_ZERO = "2021-10-28"
 URLTickerCurrentValue = "http://192.168.1.50:5000/tradingpal/getTickerValue"
@@ -879,8 +879,8 @@ class MetricHandler():
     def calcSuperScore2(self):
 
         finalResult = {}
+        transactionList = []
         totGain = 0
-        COURTAGE = 5
 
         print("Calulating superscore 2...")
 
@@ -909,7 +909,10 @@ class MetricHandler():
                     else:
                         additionalInvestedTrading += transaction['purchaseValueSek']
                         finalCountTrade = transaction['count']
-                        additionalInvestedTrading += COURTAGE
+                        courtage = tables.getCourtage(transaction['ticker'], transaction['purchaseValueSek'])
+                        transaction['courtageQuota'] = 100 * courtage / math.fabs(transaction['purchaseValueSek'])
+                        additionalInvestedTrading += courtage
+                        transactionList.append(transaction)
 
                 lastTickerValueSek = self.getLastTickerValueSekByName(name)
                 finalWorthNoTrade = lastTickerValueSek * finalCountNoTrade
@@ -925,6 +928,9 @@ class MetricHandler():
             finalResultSorted = []
             for k, v in finalResult.items():
                 finalResultSorted.append((k, v))
+            transactionList = sorted(transactionList, key = lambda i: i['courtageQuota'], reverse=True)
+            #for x in transactionList:
+            #    print(f"{x['date']}") # print courtage quota...
             return finalResultSorted, totGain
         except Exception as ex:
             print(f"Error while calculating superscore2: {ex}")
@@ -946,6 +952,12 @@ class MetricHandler():
         return data['singleStockPriceSek']
 
 
+    def nameToTicker(self, name):
+        retval = self.dbAccess.find_one({"name": name}, DbAccess.Collection.stockAssets)
+        if retval is not None and "ticker" in retval:
+            return retval["ticker"]
+        
+        return None
 
 
     def getAllTransactionsSorted(self):
@@ -957,13 +969,18 @@ class MetricHandler():
             if name not in retData:
                 retData[name] = {}
 
+            ticker = self.nameToTicker(name)
+            if ticker is None:
+                continue
+
+            nextEntry["ticker"] = ticker
             retData[name][nextEntry["date"]] = nextEntry
 
         sortedRetData = {}
 
         for ticker, transactions in retData.items():
             s = dict(collections.OrderedDict(sorted(transactions.items(), reverse=False)))
-            if len(s) >= 3:
+            if len(s) >= 2:
                 sortedRetData[ticker] = s
 
         return sortedRetData

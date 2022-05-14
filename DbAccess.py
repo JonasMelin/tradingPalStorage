@@ -11,6 +11,7 @@ collectionNameFunds = f"funds"
 collectionNameYield = f"yield"
 collectionNameTax = f"tax"
 collectionNameNewStocks = f"newStocksQueue"
+collectionStockAssets = f"stockAssets"
 
 class Collection(enum.Enum):
    Tickers = collectionNameTickers
@@ -20,6 +21,7 @@ class Collection(enum.Enum):
    Yields = collectionNameYield
    Tax = collectionNameTax
    NewStocks = collectionNameNewStocks
+   stockAssets = collectionStockAssets
 
 # ##############################################################################################################
 # ...
