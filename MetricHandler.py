@@ -495,6 +495,19 @@ class MetricHandler():
         return list(retData.values()), latestFunds
 
     # ##############################################################################################################
+    # ...
+    # ##############################################################################################################
+    def getAllSplits(self, ticker):
+        retData = {}
+
+        hits = self.dbAccess.find({"ticker": ticker}, DbAccess.Collection.splits)
+
+        for hit in hits:
+            retData[hit['ticker']] = hit
+
+        return retData
+
+    # ##############################################################################################################
     # Tested
     # ##############################################################################################################
     def fetchDailyDataFromMongo(self, daysback, allowCrawlingBack = True):
@@ -514,9 +527,26 @@ class MetricHandler():
         return [], None
 
     # ##############################################################################################################
-    # Tested
+    # ...
     # ##############################################################################################################
-    def addCurrentStockValueToStocks(self, stocks):
+    def getTotalSplitsBetween(self, startDate, endDate, splits):
+
+        retval = 1.0
+
+        for ticker, nextSplit in splits.items():
+            
+            if startDate <= nextSplit["day"] and endDate >= nextSplit["day"]:
+                retval *= nextSplit["split"]
+
+        return retval
+        
+
+    # ##############################################################################################################
+    # Tested
+    # Will add the current value to a stock, and also take into account if any splits occured on the way...
+    # ##############################################################################################################
+    def addCurrentStockValueToStocks(self, stocks, startDate, endDate):
+        
 
         if stocks is None or len(stocks) == 0:
             return
@@ -529,12 +559,14 @@ class MetricHandler():
                 URL = f"{URLTickerCurrentValue}?currency={stock['currency']}&ticker={stock['ticker']}"
                 retData = requests.get(URL)
 
+                splitMultiplier = self.getTotalSplitsBetween(startDate, endDate, self.getAllSplits(stock['ticker']))
+
                 if retData.status_code != 200:
                     print(f"Failed to get ticker: {URL}")
                     continue
 
                 tickerData = json.loads(retData.content)
-                stock['priceInSekNow'] = tickerData['price_in_sek']
+                stock['priceInSekNow'] = tickerData['price_in_sek'] / splitMultiplier
 
         except Exception as ex:
             print(f"Error in addCurrentStockValueToStocks(): {ex}")
@@ -560,7 +592,8 @@ class MetricHandler():
             else:
                 todayStocks, todayFunds = self.fetchDailyDataMostRecent(dayAsString=endDate)
 
-            self.addCurrentStockValueToStocks(startStocks)
+            
+            self.addCurrentStockValueToStocks(startStocks, startDate, endDate)
             self.addCurrentStockValueToStocks(todayStocks)
 
             totStartStockValueTodaysCourse = 0
