@@ -295,7 +295,8 @@ class MetricHandler():
                               "count": nextTicker['currentStock']['count'],
                               "singleStockPriceSek": nextTicker['singleStockPriceSek'],
                               "name": nextTicker['currentStock']['name'],
-                              "currency": nextTicker['currancy']
+                              "currency": nextTicker['currancy'],
+                              "split": nextTicker['currentStock']['split'] if 'split' in nextTicker['currentStock'] else None
                           }
                     },
                     DbAccess.Collection.DailyProgress)
