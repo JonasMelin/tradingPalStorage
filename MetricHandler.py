@@ -494,9 +494,6 @@ class MetricHandler():
 
         return list(retData.values()), latestFunds
 
-    # ##############################################################################################################
-    # ...
-    # ##############################################################################################################
     def getAllSplits(self, ticker):
         retData = {}
 
@@ -526,9 +523,6 @@ class MetricHandler():
 
         return [], None
 
-    # ##############################################################################################################
-    # ...
-    # ##############################################################################################################
     def getTotalSplitsBetween(self, startDate, endDate, splits):
 
         retval = 1.0
@@ -545,7 +539,7 @@ class MetricHandler():
     # Tested
     # Will add the current value to a stock, and also take into account if any splits occured on the way...
     # ##############################################################################################################
-    def addCurrentStockValueToStocks(self, stocks, startDate, endDate):
+    def addCurrentStockValueToStocks(self, stocks, startDate=None, endDate=None):
         
 
         if stocks is None or len(stocks) == 0:
@@ -559,7 +553,10 @@ class MetricHandler():
                 URL = f"{URLTickerCurrentValue}?currency={stock['currency']}&ticker={stock['ticker']}"
                 retData = requests.get(URL)
 
-                splitMultiplier = self.getTotalSplitsBetween(startDate, endDate, self.getAllSplits(stock['ticker']))
+                splitMultiplier = 1.0
+
+                if startDate is not None and endDate is not None:
+                    splitMultiplier = self.getTotalSplitsBetween(startDate, endDate, self.getAllSplits(stock['ticker']))
 
                 if retData.status_code != 200:
                     print(f"Failed to get ticker: {URL}")
