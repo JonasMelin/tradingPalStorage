@@ -924,6 +924,8 @@ class MetricHandler():
                 finalCountNoTrade = None
                 finalCountTrade = None
                 additionalInvestedTrading = 0
+                firstTrade = None
+                lastTrade = None
                 for date, transaction in transactions.items():
                     if startWorth is None:
                         singleStockPriceSekStart = self.getTickerValueAtDateByName(transaction["name"], date)
@@ -937,6 +939,7 @@ class MetricHandler():
                         startWorth = singleStockPriceSekStart * transaction['count']
                         finalCountNoTrade = transaction['count']
                         finalCountTrade = transaction['count']
+                        firstTrade = transaction['date']
                     else:
                         additionalInvestedTrading += transaction['purchaseValueSek']
                         finalCountTrade = transaction['count']
@@ -944,10 +947,23 @@ class MetricHandler():
                         transaction['courtageQuota'] = 100 * courtage / math.fabs(transaction['purchaseValueSek'])
                         additionalInvestedTrading += courtage
                         transactionList.append(transaction)
+                        lastTrade = transaction['date']
 
-                lastTickerValueSek = self.getLastTickerValueSekByName(name)
-                finalWorthNoTrade = lastTickerValueSek * finalCountNoTrade
-                finalWorthTrade = lastTickerValueSek * finalCountTrade
+                splitsData = self.getAllSplits(transaction['ticker'])
+
+                splits_start_to_today = self.getTotalSplitsBetween(
+                    self.getDateAsString(firstTrade), 
+                    self.getTodayAsString(), 
+                    splitsData)
+
+                splits_since_last_trade = self.getTotalSplitsBetween(
+                    self.getDateAsString(lastTrade), 
+                    self.getTodayAsString(), 
+                    splitsData)
+
+                lastTickerValueSek = self.getLastTickerValueSekByName(name) 
+                finalWorthNoTrade = lastTickerValueSek * finalCountNoTrade / splits_start_to_today
+                finalWorthTrade = lastTickerValueSek * finalCountTrade / splits_since_last_trade
                 finalAbsoluteGainNoTrade = finalWorthNoTrade - startWorth
                 finalAbsoluteGainTrade = finalWorthTrade - (additionalInvestedTrading + startWorth)
                 GAIN_TRADE = finalAbsoluteGainTrade - finalAbsoluteGainNoTrade
