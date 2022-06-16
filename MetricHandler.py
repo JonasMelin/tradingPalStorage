@@ -949,6 +949,9 @@ class MetricHandler():
                         transactionList.append(transaction)
                         lastTrade = transaction['date']
 
+                if lastTrade is None:
+                    continue
+
                 splitsData = self.getAllSplits(transaction['ticker'])
 
                 splits_start_to_today = self.getTotalSplitsBetween(
