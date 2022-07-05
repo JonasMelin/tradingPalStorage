@@ -1,5 +1,5 @@
 from MetricHandler import MetricHandler
-from flask import Flask, request
+from flask import Flask, request, Response
 import threading
 import logging
 log = logging.getLogger('werkzeug')
@@ -76,6 +76,24 @@ def getDailyMetrics():
     return {
         "retval": metricHandler.getDailyMetrics()
     }
+
+@app.route("/tradingpalstorage/addPutinSekToMongo", methods=['GET'])
+def addPutinSekToMongo():
+
+    additionalPutinSek = request.args.get('additionalPutinSek')
+
+    if additionalPutinSek is None:
+        return Response("Please provied variable additionalPutinSek, i.e \"http://localhost:5001/tradingpalstorage/addPutinSekToMongo?additionalPutinSek=2000\" ", status=400)
+
+    try:
+        additionalPutinSek = int(additionalPutinSek)
+    except Exception as ex:
+        return Response("Provied variable is not an int", status=400)
+
+    print(f"Adding putin sek to mongo: {additionalPutinSek}")
+    metricHandler.updateFundsToMongo(purchaseValueSek=0, additionalPutinSek=additionalPutinSek)
+    
+    return Response(f"Added {additionalPutinSek} to mongo", status=200)
 
 
 if __name__ == "__main__":

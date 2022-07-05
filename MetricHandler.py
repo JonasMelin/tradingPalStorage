@@ -114,11 +114,13 @@ class MetricHandler():
     # ##############################################################################################################
     # Tested
     # ##############################################################################################################
-    def updateFundsToMongo(self, purchaseValueSek: int):
+    def updateFundsToMongo(self, purchaseValueSek: int, additionalPutinSek: int = 0):
 
         try:
             if purchaseValueSek != 0:
                 print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} Updating funds to mongo {purchaseValueSek}")
+            if additionalPutinSek != 0:
+                print(f"{datetime.datetime.now(pytz.timezone('Europe/Stockholm'))} adding additionalPutinSek to mongo {additionalPutinSek}")
 
             fromMongo = self.dbAccess.find_one_sort_by(("day", -1), DbAccess.Collection.Funds)
 
@@ -171,7 +173,7 @@ class MetricHandler():
                 {"$set":
                     {
                         "fundsSek": fundsSek,
-                        "putinSek": putinSekFromMongo,
+                        "putinSek": putinSekFromMongo + additionalPutinSek,
                         "yield": yieldFromMongo,
                         "yieldTax": yieldTaxFromMongo,
                         "tpIndex": tpIndex,
