@@ -92,8 +92,8 @@ def addPutinSekToMongo():
 
     print(f"Adding putin sek to mongo: {additionalPutinSek}")
     metricHandler.updateFundsToMongo(purchaseValueSek=0, additionalPutinSek=additionalPutinSek)
-    
-    return Response(f"Added {additionalPutinSek} to mongo", status=200)
+
+    return Response(status=200)
 
 
 if __name__ == "__main__":
