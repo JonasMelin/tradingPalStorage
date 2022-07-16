@@ -1,6 +1,6 @@
 import collections, time, requests, json, datetime, sys, pytz, copy, DbAccess, tables, math
 
-DAY_ZERO = "2021-10-28"
+DAY_ZERO = "2022-01-24"
 URLTickerCurrentValue = "http://192.168.1.50:5000/tradingpal/getTickerValue"
 URLTickers = "http://192.168.1.50:5000/tradingpal/getAllStocks"
 URLTransactions = "http://127.0.0.1:5000/tradingpal/getFirstChangeLogItem"
