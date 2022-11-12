@@ -595,15 +595,22 @@ class MetricHandler():
             self.addCurrentStockValueToStocks(startStocks, startDate, endDate)
             self.addCurrentStockValueToStocks(todayStocks)
 
+            ignoreList = {}
+
             totStartStockValueTodaysCourse = 0
             for stock in startStocks:
                 if 'priceInSekNow' not in stock or 'count' not in stock:
-                    print(f"(a) warn. TpIndex, start stocks could not be looked up in todays value {stock}")
-                    return 0.0, -1
+                    ignoreList[stock["ticker"]] = "ignore"
+                    print(f"(a) warn. TpIndex, start stocks could not be looked up in todays value {stock['ticker']}. Ignoring...")
+                    continue
                 totStartStockValueTodaysCourse += stock['priceInSekNow'] * stock['count']
 
             totTodayStockValue = 0
             for stock in todayStocks:
+                if stock["ticker"] in ignoreList:
+                    print(f"Ignoring {stock['ticker']} in calcTpIndexSince()")
+                    continue
+
                 if 'singleStockPriceSek' not in stock or 'count' not in stock:
                     print(f"(b) warn. Mal formatted entry from mongo {stock}")
                     return 0.0, -1
